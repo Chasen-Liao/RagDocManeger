@@ -17,16 +17,6 @@ RagDocMan 是一个基于高级 RAG（检索增强生成）技术的智能知识
 
 ## 技术栈
 
-### 桌面端架构
-
-| 层级 | 技术选型 |
-|------|----------|
-| **前端** | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
-| **UI 组件** | shadcn-vue（基于 Radix UI） |
-| **样式** | Tailwind CSS + CSS Variables（支持深色模式） |
-| **桌面壳** | PyWebView（轻量级 ~30MB） |
-| **后端** | FastAPI + Python 3.10+ |
-
 ### 核心依赖
 
 - **RAG 框架**：LangChain
