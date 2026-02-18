@@ -160,7 +160,49 @@ async def generate_answer_stream_generator(request: RagRequest, db: Session):
 
 @router.post("/answer/stream")
 async def generate_answer_stream(request: RagRequest, db: Session = Depends(get_db)):
-    """Generate answer from knowledge base using RAG with streaming."""
+    """Generate answer from knowledge base using RAG with streaming.
+    
+    Performs hybrid retrieval and generates an answer using LLM, streaming the result
+    via Server-Sent Events (SSE). This is the recommended endpoint for frontend integration.
+    
+    **Request Example**:
+    ```json
+    {
+      "kb_id": "kb_123456",
+      "query": "产品的主要功能是什么？",
+      "top_k": 5,
+      "include_sources": true
+    }
+    ```
+    
+    **Response Format**: Server-Sent Events (SSE)
+    
+    Events:
+    - `sources`: Retrieved source documents
+    - `content`: Answer content chunks (streamed character by character)
+    - `error`: Error message if generation fails
+    - `done`: Indicates stream completion
+    
+    **Example Stream**:
+    ```
+    data: {"type": "sources", "data": [...]}
+    data: {"type": "content", "data": "根据"}
+    data: {"type": "content", "data": "产品文档"}
+    data: {"type": "done"}
+    ```
+    
+    **Performance**:
+    - First byte time: < 1 second
+    - Streaming speed: Real-time
+    - Requires LLM API Key configuration
+    
+    Args:
+        request: RAG request containing kb_id, query, top_k, include_sources
+        db: Database session
+        
+    Returns:
+        StreamingResponse with Server-Sent Events
+    """
     return StreamingResponse(
         generate_answer_stream_generator(request, db),
         media_type="text/event-stream",
@@ -173,10 +215,53 @@ async def generate_answer_stream(request: RagRequest, db: Session = Depends(get_
 
 @router.post("/answer", response_model=dict)
 async def generate_answer(request: RagRequest, db: Session = Depends(get_db)):
-    """Generate answer from knowledge base using RAG.
+    """Generate answer from knowledge base using RAG (non-streaming).
+    
+    Performs hybrid retrieval and generates a complete answer using LLM.
+    Returns the full answer at once. Suitable for backend service calls.
+    
+    **Request Example**:
+    ```json
+    {
+      "kb_id": "kb_123456",
+      "query": "产品的主要功能是什么？",
+      "top_k": 5,
+      "include_sources": true
+    }
+    ```
+    
+    **Response Example** (200 OK):
+    ```json
+    {
+      "success": true,
+      "data": {
+        "answer": "根据产品文档，产品的主要功能包括：\n1. 数据管理\n2. 智能分析\n3. 自动化处理",
+        "sources": [
+          {
+            "doc_id": "doc_789012",
+            "doc_name": "产品手册.pdf",
+            "chunk_id": "chunk_001",
+            "content": "产品的主要功能包括...",
+            "score": 0.95
+          }
+        ],
+        "query": "产品的主要功能是什么？"
+      },
+      "message": null
+    }
+    ```
+    
+    **Performance**:
+    - Response time: 2-5 seconds (including LLM call)
+    - Requires LLM API Key configuration
+    
+    **Error Cases**:
+    - 404 Not Found: Knowledge base not found
+    - 400 Bad Request: Empty query or invalid parameters
+    - 503 Service Unavailable: LLM service unavailable
 
     Args:
-        request: RAG request containing kb_id, query, and optional top_k
+        request: RAG request containing kb_id, query, top_k, include_sources
         db: Database session
 
     Returns:

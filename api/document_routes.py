@@ -19,6 +19,48 @@ router = APIRouter(prefix="/knowledge-bases", tags=["documents"])
 async def upload_document(kb_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Upload a document to a knowledge base.
     
+    Uploads a document file to a knowledge base. The system automatically:
+    1. Validates the file format (PDF, Word, Markdown)
+    2. Parses the document content
+    3. Splits the content into semantic chunks
+    4. Generates vector embeddings for each chunk
+    5. Stores chunks in both the vector database and relational database
+    
+    **Supported Formats**:
+    - PDF (.pdf)
+    - Word (.docx, .doc)
+    - Markdown (.md)
+    
+    **Request Example**:
+    ```
+    POST /knowledge-bases/kb_123456/documents/upload
+    Content-Type: multipart/form-data
+    
+    file: <binary file content>
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "doc_789012",
+        "kb_id": "kb_123456",
+        "name": "产品手册.pdf",
+        "file_size": 2048000,
+        "file_type": "pdf",
+        "chunk_count": 45,
+        "created_at": "2024-01-15T10:30:00"
+      },
+      "message": "Document uploaded successfully"
+    }
+    ```
+    
+    **Error Cases**:
+    - 404 Not Found: 知识库不存在
+    - 400 Bad Request: 不支持的文件格式或文件过大
+    - 500 Internal Server Error: 文档处理失败
+    
     Args:
         kb_id: Knowledge base ID
         file: Document file to upload
@@ -93,6 +135,49 @@ async def get_documents(
 ):
     """Get list of documents in a knowledge base.
     
+    Retrieves a paginated list of all documents in a specific knowledge base.
+    
+    **Path Parameters**:
+    - `kb_id`: 知识库 ID
+    
+    **Query Parameters**:
+    - `skip`: 跳过的记录数（默认 0）
+    - `limit`: 返回的最大记录数（默认 20，最大 100）
+    
+    **Request Example**:
+    ```
+    GET /knowledge-bases/kb_123456/documents?skip=0&limit=20
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "id": "doc_789012",
+          "kb_id": "kb_123456",
+          "name": "产品手册.pdf",
+          "file_size": 2048000,
+          "file_type": "pdf",
+          "chunk_count": 45,
+          "created_at": "2024-01-15T10:30:00"
+        }
+      ],
+      "meta": {
+        "total": 5,
+        "skip": 0,
+        "limit": 20,
+        "page": 1,
+        "pages": 1
+      },
+      "message": null
+    }
+    ```
+    
+    **Error Cases**:
+    - 404 Not Found: 知识库不存在
+    
     Args:
         kb_id: Knowledge base ID
         skip: Number of records to skip
@@ -134,6 +219,30 @@ async def get_documents(
 @router.delete("/{kb_id}/documents/{doc_id}", response_model=dict, status_code=status.HTTP_200_OK)
 async def delete_document(kb_id: str, doc_id: str, db: Session = Depends(get_db)):
     """Delete a document from a knowledge base.
+    
+    Deletes a document and all its associated chunks from both the vector database
+    and the relational database. This operation is irreversible.
+    
+    **Path Parameters**:
+    - `kb_id`: 知识库 ID
+    - `doc_id`: 文档 ID
+    
+    **Request Example**:
+    ```
+    DELETE /knowledge-bases/kb_123456/documents/doc_789012
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": null,
+      "message": "Document deleted successfully"
+    }
+    ```
+    
+    **Error Cases**:
+    - 404 Not Found: 知识库或文档不存在
     
     Args:
         kb_id: Knowledge base ID

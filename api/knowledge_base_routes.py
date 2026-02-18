@@ -20,6 +20,38 @@ router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
 async def create_knowledge_base(kb_data: KnowledgeBaseCreate, db: Session = Depends(get_db)):
     """Create a new knowledge base.
     
+    Creates a new knowledge base with an independent vector index in ChromaDB.
+    Each knowledge base is isolated and can contain multiple documents.
+    
+    **Request Example**:
+    ```json
+    {
+      "name": "产品文档库",
+      "description": "存储所有产品相关的文档"
+    }
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "kb_123456",
+        "name": "产品文档库",
+        "description": "存储所有产品相关的文档",
+        "document_count": 0,
+        "total_size": 0,
+        "created_at": "2024-01-15T10:30:00",
+        "updated_at": "2024-01-15T10:30:00"
+      },
+      "message": "Knowledge base created successfully"
+    }
+    ```
+    
+    **Error Cases**:
+    - 409 Conflict: 知识库名称已存在
+    - 400 Bad Request: 缺失必要字段或字段格式不正确
+    
     Args:
         kb_data: Knowledge base creation data
         db: Database session
@@ -55,6 +87,43 @@ async def get_knowledge_bases(
     db: Session = Depends(get_db)
 ):
     """Get list of knowledge bases.
+    
+    Retrieves a paginated list of all knowledge bases with their metadata.
+    
+    **Query Parameters**:
+    - `skip`: 跳过的记录数（默认 0）
+    - `limit`: 返回的最大记录数（默认 20，最大 100）
+    
+    **Request Example**:
+    ```
+    GET /knowledge-bases?skip=0&limit=20
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "id": "kb_123456",
+          "name": "产品文档库",
+          "description": "存储所有产品相关的文档",
+          "document_count": 5,
+          "total_size": 1024000,
+          "created_at": "2024-01-15T10:30:00",
+          "updated_at": "2024-01-15T10:30:00"
+        }
+      ],
+      "meta": {
+        "total": 10,
+        "skip": 0,
+        "limit": 20,
+        "page": 1,
+        "pages": 1
+      },
+      "message": null
+    }
+    ```
     
     Args:
         skip: Number of records to skip
@@ -97,6 +166,36 @@ async def get_knowledge_bases(
 async def get_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     """Get knowledge base details.
     
+    Retrieves detailed information about a specific knowledge base.
+    
+    **Path Parameters**:
+    - `kb_id`: 知识库 ID
+    
+    **Request Example**:
+    ```
+    GET /knowledge-bases/kb_123456
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "kb_123456",
+        "name": "产品文档库",
+        "description": "存储所有产品相关的文档",
+        "document_count": 5,
+        "total_size": 1024000,
+        "created_at": "2024-01-15T10:30:00",
+        "updated_at": "2024-01-15T10:30:00"
+      },
+      "message": null
+    }
+    ```
+    
+    **Error Cases**:
+    - 404 Not Found: 知识库不存在
+    
     Args:
         kb_id: Knowledge base ID
         db: Database session
@@ -128,6 +227,40 @@ async def get_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
 @router.put("/{kb_id}", response_model=dict)
 async def update_knowledge_base(kb_id: str, kb_data: KnowledgeBaseUpdate, db: Session = Depends(get_db)):
     """Update knowledge base information.
+    
+    Updates the name and/or description of an existing knowledge base.
+    
+    **Path Parameters**:
+    - `kb_id`: 知识库 ID
+    
+    **Request Example**:
+    ```json
+    {
+      "name": "产品文档库 v2",
+      "description": "更新的描述"
+    }
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "kb_123456",
+        "name": "产品文档库 v2",
+        "description": "更新的描述",
+        "document_count": 5,
+        "total_size": 1024000,
+        "created_at": "2024-01-15T10:30:00",
+        "updated_at": "2024-01-15T11:00:00"
+      },
+      "message": "Knowledge base updated successfully"
+    }
+    ```
+    
+    **Error Cases**:
+    - 404 Not Found: 知识库不存在
+    - 409 Conflict: 新名称已被其他知识库使用
     
     Args:
         kb_id: Knowledge base ID
@@ -164,6 +297,29 @@ async def update_knowledge_base(kb_id: str, kb_data: KnowledgeBaseUpdate, db: Se
 @router.delete("/{kb_id}", response_model=dict, status_code=status.HTTP_200_OK)
 async def delete_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     """Delete a knowledge base.
+    
+    Deletes a knowledge base and all its associated documents and vector embeddings.
+    This operation is irreversible.
+    
+    **Path Parameters**:
+    - `kb_id`: 知识库 ID
+    
+    **Request Example**:
+    ```
+    DELETE /knowledge-bases/kb_123456
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": null,
+      "message": "Knowledge base deleted successfully"
+    }
+    ```
+    
+    **Error Cases**:
+    - 404 Not Found: 知识库不存在
     
     Args:
         kb_id: Knowledge base ID

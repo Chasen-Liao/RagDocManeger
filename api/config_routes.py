@@ -12,6 +12,41 @@ router = APIRouter(prefix="/config", tags=["config"])
 async def get_config():
     """Get current configuration (non-sensitive fields only).
     
+    Retrieves the current system configuration. Sensitive fields like API keys
+    are masked for security reasons.
+    
+    **Request Example**:
+    ```
+    GET /config
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "app_name": "RagDocMan",
+        "app_version": "1.0.0",
+        "debug": false,
+        "log_level": "INFO",
+        "database_url": "***",
+        "chroma_db_path": "./chroma_data",
+        "llm_provider": "siliconflow",
+        "embedding_provider": "siliconflow",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
+        "reranker_provider": "siliconflow",
+        "reranker_model": "BAAI/bge-reranker-large",
+        "max_file_size_mb": 100,
+        "supported_file_types": ["pdf", "docx", "md"],
+        "chunk_size": 1000,
+        "chunk_overlap": 200,
+        "retrieval_top_k": 10,
+        "reranking_top_k": 5
+      },
+      "message": null
+    }
+    ```
+    
     Returns:
         Current configuration
     """
@@ -54,6 +89,51 @@ async def get_config():
 @router.put("", response_model=dict)
 async def update_config(config_update: Dict[str, Any]):
     """Update configuration.
+    
+    Updates system configuration parameters. Only non-sensitive fields can be updated.
+    
+    **Updatable Fields**:
+    - `debug`: 调试模式开关
+    - `log_level`: 日志级别 (DEBUG, INFO, WARNING, ERROR)
+    - `llm_provider`: LLM 服务商
+    - `embedding_provider`: 嵌入模型服务商
+    - `embedding_model`: 嵌入模型名称
+    - `reranker_provider`: 重排序模型服务商
+    - `reranker_model`: 重排序模型名称
+    - `chunk_size`: 文本块大小
+    - `chunk_overlap`: 块重叠大小
+    - `retrieval_top_k`: 检索返回的最大块数
+    - `reranking_top_k`: 重排序返回的最大块数
+    
+    **Request Example**:
+    ```json
+    {
+      "debug": true,
+      "log_level": "DEBUG",
+      "chunk_size": 1500,
+      "retrieval_top_k": 15
+    }
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "app_name": "RagDocMan",
+        "app_version": "1.0.0",
+        "debug": true,
+        "log_level": "DEBUG",
+        "chunk_size": 1500,
+        "retrieval_top_k": 15
+      },
+      "message": "Configuration updated successfully"
+    }
+    ```
+    
+    **Error Cases**:
+    - 400 Bad Request: 包含无效的配置字段或值
+    - 422 Unprocessable Entity: 配置验证失败
     
     Args:
         config_update: Configuration fields to update

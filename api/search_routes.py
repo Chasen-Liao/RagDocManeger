@@ -19,6 +19,53 @@ router = APIRouter(prefix="", tags=["search"])
 async def search(request: SearchRequest, db: Session = Depends(get_db)):
     """Perform basic hybrid search.
     
+    Performs a hybrid search combining:
+    1. BM25 keyword-based retrieval
+    2. Vector similarity search
+    3. Result fusion using Reciprocal Rank Fusion (RRF)
+    4. Cross-Encoder reranking for precision
+    
+    **Request Example**:
+    ```json
+    {
+      "kb_id": "kb_123456",
+      "query": "产品的主要功能是什么？",
+      "top_k": 5
+    }
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "id": "chunk_001",
+          "content": "产品的主要功能包括...",
+          "doc_id": "doc_789012",
+          "doc_name": "产品手册.pdf",
+          "score": 0.95
+        },
+        {
+          "id": "chunk_002",
+          "content": "功能特性：...",
+          "doc_id": "doc_789012",
+          "doc_name": "产品手册.pdf",
+          "score": 0.87
+        }
+      ],
+      "message": null
+    }
+    ```
+    
+    **Performance**:
+    - 典型响应时间: < 2 秒
+    - 支持的最大 top_k: 100
+    
+    **Error Cases**:
+    - 404 Not Found: 知识库不存在
+    - 400 Bad Request: 查询为空或参数无效
+    
     Args:
         request: Search request containing kb_id, query, and optional top_k
         db: Database session
@@ -87,6 +134,55 @@ async def search(request: SearchRequest, db: Session = Depends(get_db)):
 @router.post("/search/with-rewrite", response_model=dict)
 async def search_with_rewrite(request: SearchRequest, db: Session = Depends(get_db)):
     """Perform search with query rewriting.
+    
+    Performs an advanced search with automatic query optimization:
+    1. Query rewriting using HyDE (Hypothetical Document Embeddings)
+    2. Query expansion to cover related concepts
+    3. Hybrid retrieval with rewritten queries
+    4. Cross-Encoder reranking
+    
+    This approach is particularly effective for:
+    - Complex or ambiguous queries
+    - Queries with implicit context
+    - Multi-concept searches
+    
+    **Request Example**:
+    ```json
+    {
+      "kb_id": "kb_123456",
+      "query": "上周开会提到的那个客户方案在哪？",
+      "top_k": 5
+    }
+    ```
+    
+    **Response Example**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "results": [
+          {
+            "id": "chunk_001",
+            "content": "客户方案详情...",
+            "doc_id": "doc_789012",
+            "doc_name": "会议记录.md",
+            "score": 0.98
+          }
+        ],
+        "rewritten_query": "客户方案 会议 上周"
+      },
+      "message": null
+    }
+    ```
+    
+    **Performance**:
+    - 典型响应时间: < 3 秒（包括 LLM 调用）
+    - 需要配置 LLM API Key
+    
+    **Error Cases**:
+    - 404 Not Found: 知识库不存在
+    - 400 Bad Request: 查询为空或参数无效
+    - 503 Service Unavailable: LLM 服务不可用
     
     Args:
         request: Search request containing kb_id, query, and optional top_k
