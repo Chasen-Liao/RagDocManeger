@@ -374,6 +374,9 @@ MAX_FILE_SIZE_MB=100
 | **硅基流动** | BAAI/bge-large-zh-v1.5 | 1024 |
 | Jina AI | jina-embeddings-v2-base-zh | 768 |
 
+强烈建议硅基流动！➡️ [硅基流动](https://cloud.siliconflow.cn/i/dbb2IJTv)
+
+`注册立马送16元！！！所有高端模型可用！！！`
 ---
 
 ## 一句话操作示例
