@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     
     # Application Configuration
     app_name: str = "RagDocMan"
-    app_version: str = "0.1.0"
+    app_version: str = "0.1.2"
     debug: bool = False
     log_level: str = "INFO"
     
