@@ -5,6 +5,10 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Development-orange.svg)](https://github.com/RagDocMan)
 
+**语言:** 中文 | [English](README_EN.md)
+
+---
+
 RagDocMan 是一个基于高级 RAG（检索增强生成）技术的智能知识库管理系统。它允许用户通过自然语言对话来管理文档库，实现"所说即所得"的操作体验。
 
 ![RAG 增强架构](images/RAG增强如何实现.png)
