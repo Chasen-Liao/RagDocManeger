@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from models.orm import Document, Chunk, KnowledgeBase
 from models.schemas import DocumentResponse, PaginatedResponse
 from rag.document_processor import DocumentProcessor
-from rag.chunking_strategy import ChunkingStrategy
+from rag.chunking_strategy import ChunkingStrategy, MarkdownHeadingChunkingStrategy
 from core.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class DocumentService:
         self.upload_dir = upload_dir
         self.processor = DocumentProcessor()
         self.chunker = ChunkingStrategy()
+        self.md_chunker = MarkdownHeadingChunkingStrategy()
 
         # Create upload directory if it doesn't exist
         Path(self.upload_dir).mkdir(parents=True, exist_ok=True)
@@ -92,7 +93,22 @@ class DocumentService:
 
             # Process document
             content = self.processor.process_document(file_path)
-            chunks = self.chunker.chunk_text(content)
+
+            # 根据文件类型选择切分策略
+            file_suffix = Path(file_name).suffix.lower()
+            if file_suffix == '.md':
+                # Markdown 文件使用标题切分策略
+                chunks_with_metadata = self.md_chunker.chunk_text(content)
+                # 提取 chunk 内容和元数据
+                chunks = []
+                chunk_metadata_list = []
+                for item in chunks_with_metadata:
+                    chunks.append(item['content'])
+                    chunk_metadata_list.append(item.get('metadata', {}))
+            else:
+                # 其他文件使用默认切分策略
+                chunks = self.chunker.chunk_text(content)
+                chunk_metadata_list = [{}] * len(chunks)
 
             # Generate embeddings and store chunks
             chunk_ids = []

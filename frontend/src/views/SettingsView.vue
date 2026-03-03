@@ -182,6 +182,10 @@ async function saveConfig() {
             <span class="text-light-text dark:text-dark-text">{{ config.llm_provider }}</span>
           </div>
           <div class="flex justify-between py-2 border-b border-light-border dark:border-dark-border">
+            <span class="text-light-text/60 dark:text-dark-text/60">{{ languageStore.t.settings.llmModel }}</span>
+            <span class="text-light-text dark:text-dark-text">{{ config.llm_model }}</span>
+          </div>
+          <div class="flex justify-between py-2 border-b border-light-border dark:border-dark-border">
             <span class="text-light-text/60 dark:text-dark-text/60">{{ languageStore.t.settings.embeddingProvider }}</span>
             <span class="text-light-text dark:text-dark-text">{{ config.embedding_provider }}</span>
           </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, computed } from 'vue'
-import { Send, Loader2, FileText, Database, Plus } from 'lucide-vue-next'
+import { Send, Loader2, FileText, Database, Plus, Bot, Sparkles, Trash2 } from 'lucide-vue-next'
 import { marked } from 'marked'
 import { api, type KnowledgeBase, type SourceReference } from '@/api/client'
 import { useLanguageStore } from '@/stores/language'
@@ -26,6 +26,7 @@ const selectedKb = ref<string>('')
 const knowledgeBases = ref<KnowledgeBase[]>([])
 const pendingContent = ref('')
 const inputRef = ref<HTMLTextAreaElement | null>(null)
+const currentSessionId = ref<string>('')
 
 function adjustTextareaHeight() {
   if (inputRef.value) {
@@ -60,8 +61,33 @@ function resetInputHeight() {
 
 onMounted(async () => {
   await loadKnowledgeBases()
-  loadSessions()
+  await loadSessionHistory()
 })
+
+// Load session history from backend
+async function loadSessionHistory() {
+  const savedSessionId = localStorage.getItem('ragdocman_current_session')
+  if (savedSessionId) {
+    try {
+      const res = await api.getSessionHistory(savedSessionId)
+      if (res.success && res.data && res.data.messages) {
+        // Convert backend history to messages
+        for (const msg of res.data.messages) {
+          messages.value.push({
+            id: `${Date.now()}_${Math.random()}`,
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+            isComplete: true
+          })
+        }
+        // Update session_id for continuing the conversation
+        currentSessionId.value = savedSessionId
+      }
+    } catch (error) {
+      console.error('Failed to load session history:', error)
+    }
+  }
+}
 
 async function loadKnowledgeBases() {
   const res = await api.getKnowledgeBases()
@@ -79,44 +105,6 @@ const kbOptions = computed(() => {
     label: kb.name
   }))
 })
-
-function loadSessions() {
-  const saved = localStorage.getItem('ragdocman_sessions')
-  if (saved) {
-    try {
-      const sessions = JSON.parse(saved)
-      if (sessions.length > 0) {
-        messages.value = sessions[0].messages || []
-        selectedKb.value = sessions[0].kbId || ''
-      }
-    } catch {
-      // Ignore
-    }
-  }
-}
-
-function saveSession() {
-  const sessions = localStorage.getItem('ragdocman_sessions')
-  let sessionList = sessions ? JSON.parse(sessions) : []
-
-  if (sessionList.length === 0 || sessionList[0].messages.length === 0) {
-    sessionList.unshift({
-      id: Date.now().toString(),
-      kbId: selectedKb.value,
-      messages: messages.value,
-      createdAt: new Date().toISOString()
-    })
-  } else {
-    sessionList[0] = {
-      ...sessionList[0],
-      kbId: selectedKb.value,
-      messages: messages.value,
-      createdAt: new Date().toISOString()
-    }
-  }
-
-  localStorage.setItem('ragdocman_sessions', JSON.stringify(sessionList))
-}
 
 function scrollToBottom() {
   nextTick(() => {
@@ -230,13 +218,20 @@ async function sendMessage() {
 
   scrollToBottom()
 
+  // Get or create session ID
+  if (!currentSessionId.value) {
+    currentSessionId.value = localStorage.getItem('ragdocman_current_session') || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    localStorage.setItem('ragdocman_current_session', currentSessionId.value)
+  }
+
   try {
     await api.streamRagAnswer(
       {
         kb_id: selectedKb.value,
         query,
         top_k: 5,
-        include_sources: true
+        include_sources: true,
+        session_id: currentSessionId.value
       },
       {
         onSources: (sources) => {
@@ -249,7 +244,6 @@ async function sendMessage() {
         },
         onDone: () => {
           messages.value[assistantIndex].isComplete = true
-          saveSession()
         },
         onError: (error) => {
           pendingContent.value = languageStore.current === 'zh'
@@ -379,18 +373,10 @@ async function handleKbCommand(cmd: { action: string; name?: string; id?: string
 }
 
 function newChat() {
-  if (messages.value.length > 0) {
-    const sessions = localStorage.getItem('ragdocman_sessions')
-    let sessionList = sessions ? JSON.parse(sessions) : []
-    sessionList.unshift({
-      id: Date.now().toString(),
-      kbId: selectedKb.value,
-      messages: messages.value,
-      createdAt: new Date().toISOString()
-    })
-    localStorage.setItem('ragdocman_sessions', JSON.stringify(sessionList))
-  }
+  // Clear current session on UI
   messages.value = []
+  localStorage.removeItem('ragdocman_current_session')
+  currentSessionId.value = ''
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -402,105 +388,179 @@ function handleKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-4rem)] flex flex-col max-w-4xl mx-auto px-4 py-8">
+  <div class="min-h-[calc(100vh-4rem)] flex flex-col">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="font-title text-2xl font-bold text-light-text dark:text-dark-text">{{ languageStore.t.chat.title }}</h1>
-      <div class="flex items-center gap-3">
-        <Select
-          v-model="selectedKb"
-          :options="kbOptions"
-        />
-        <Button variant="ghost" size="sm" @click="newChat">
-          <Plus class="w-4 h-4" />
-          {{ languageStore.t.chat.newChat }}
-        </Button>
+    <div class="sticky top-0 z-20 bg-gradient-to-b from-light-bg dark:from-dark-bg to-transparent pt-4 pb-2 px-4">
+      <div class="flex items-center justify-between max-w-4xl mx-auto">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+              <Bot class="w-5 h-5 text-white" />
+            </div>
+            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-light-bg dark:border-dark-bg"></div>
+          </div>
+          <div>
+            <h1 class="font-title text-xl font-bold text-light-text dark:text-dark-text">
+              {{ languageStore.t.chat.title }}
+            </h1>
+            <p class="text-xs text-cyan-500 dark:text-cyan-400 font-medium">
+              RAG Assistant
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <Select
+            v-model="selectedKb"
+            :options="kbOptions"
+            class="min-w-[180px]"
+          />
+          <Button variant="ghost" size="sm" @click="newChat" :title="languageStore.t.chat.newChat">
+            <Plus class="w-4 h-4" />
+          </Button>
+        </div>
       </div>
     </div>
 
     <!-- Messages -->
-    <div ref="messagesContainer" class="flex-1 space-y-4 overflow-y-auto mb-4 max-h-[calc(100vh-16rem)]">
-      <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-64 text-center">
-        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mb-4">
-          <Database class="w-8 h-8 text-light-cta dark:text-dark-cta" />
-        </div>
-        <h2 class="text-xl font-title font-semibold text-light-text dark:text-dark-text mb-2">
-          {{ languageStore.t.chat.welcome }}
-        </h2>
-        <p class="text-light-text/60 dark:text-dark-text/60 max-w-md">
-          {{ languageStore.t.chat.welcomeDesc }}
-        </p>
-      </div>
-
-      <div
-        v-for="(msg, index) in messages"
-        :key="msg.id"
-        class="animate-slide-up"
-      >
-        <!-- User message -->
-        <div v-if="msg.role === 'user'" class="flex justify-end">
-          <div class="max-w-[80%] rounded-2xl px-4 py-3 bg-light-cta dark:bg-dark-cta text-white">
-            {{ msg.content }}
+    <div ref="messagesContainer" class="flex-1 overflow-y-auto px-4 py-4 max-w-4xl mx-auto w-full">
+      <!-- Welcome State -->
+      <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div class="relative mb-6">
+          <div class="w-24 h-24 rounded-3xl bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-purple-600/20 flex items-center justify-center animate-pulse">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-xl shadow-cyan-500/30">
+              <Sparkles class="w-8 h-8 text-white" />
+            </div>
           </div>
         </div>
 
-        <!-- Assistant message -->
-        <div v-else class="flex justify-start">
-          <Card class="max-w-[85%] p-4">
-            <div class="prose prose-sm dark:prose-invert max-w-none">
-              <div v-if="msg.content" class="markdown-content" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="flex items-center gap-2 text-light-text/50">
-                <Loader2 class="w-4 h-4 animate-spin" />
-                <span>{{ languageStore.t.chat.thinking }}</span>
-              </div>
-            </div>
+        <h2 class="text-2xl font-title font-bold text-light-text dark:text-dark-text mb-3 bg-gradient-to-r from-cyan-500 to-blue-600 bg-clip-text text-transparent">
+          {{ languageStore.t.chat.welcome }}
+        </h2>
+        <p class="text-light-text/60 dark:text-dark-text/60 max-w-md mb-8">
+          {{ languageStore.t.chat.welcomeDesc }}
+        </p>
 
-            <!-- Sources -->
-            <Transition name="fade-slide">
-              <div v-if="msg.isComplete && msg.sources && msg.sources.length > 0" class="mt-4 pt-4 border-t border-light-border dark:border-dark-border">
-                <h4 class="text-sm font-medium text-light-text/70 dark:text-dark-text/70 mb-2 flex items-center gap-1">
-                  <FileText class="w-4 h-4" />
-                  {{ languageStore.t.chat.sources }}
-                </h4>
-                <div class="space-y-2">
-                  <div
-                    v-for="source in msg.sources"
-                    :key="source.chunk_id"
-                    class="text-xs p-2 rounded-lg bg-light-bg dark:bg-dark-bg"
-                  >
-                    <div class="font-medium text-light-cta dark:text-dark-cta">{{ source.doc_name }}</div>
-                    <div class="text-light-text/60 dark:text-dark-text/60 truncate">{{ source.content }}</div>
-                  </div>
+        <!-- Quick action cards -->
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-lg">
+          <button
+            v-for="action in [
+              { icon: FileText, label: '搜索文档', labelEn: 'Search Docs', action: '搜索' },
+              { icon: Plus, label: '创建知识库', labelEn: 'Create KB', action: '创建一个' },
+              { icon: Database, label: '查看知识库', labelEn: 'View KBs', action: '列出知识库' }
+            ]"
+            :key="action.label"
+            @click="input = action.action"
+            class="flex items-center gap-2 px-4 py-3 rounded-xl border border-light-border dark:border-dark-border hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all duration-200 group"
+          >
+            <component :is="action.icon" class="w-4 h-4 text-cyan-500 group-hover:text-cyan-400" />
+            <span class="text-sm text-light-text/80 dark:text-dark-text/80">{{ languageStore.current === 'zh' ? action.label : action.labelEn }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Message List -->
+      <div v-else class="space-y-4 pb-4">
+        <div
+          v-for="msg in messages"
+          :key="msg.id"
+          class="animate-fade-in"
+        >
+          <!-- User message -->
+          <div v-if="msg.role === 'user'" class="flex justify-end">
+            <div class="max-w-[80%] rounded-2xl px-4 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20">
+              <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+            </div>
+          </div>
+
+          <!-- Assistant message -->
+          <div v-else class="flex justify-start">
+            <Card class="max-w-[95%] w-full p-0 overflow-hidden">
+              <!-- Status bar -->
+              <div class="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-gray-50/50 to-gray-100/50 dark:from-gray-800/50 dark:to-gray-700/50 border-b border-light-border dark:border-dark-border">
+                <div class="flex items-center gap-2">
+                  <Bot class="w-4 h-4 text-cyan-500" />
+                  <span class="text-sm font-medium text-light-text/70 dark:text-dark-text/70">
+                    AI
+                  </span>
+                  <span v-if="!msg.isComplete" class="flex items-center gap-1 text-xs text-cyan-500">
+                    <Loader2 class="w-3 h-3 animate-spin" />
+                    {{ languageStore.t.chat.thinking }}
+                  </span>
+                  <span v-else class="text-xs text-green-500">
+                    {{ languageStore.current === 'zh' ? '完成' : 'Done' }}
+                  </span>
                 </div>
               </div>
-            </Transition>
-          </Card>
+
+              <!-- Content -->
+              <div class="p-4">
+                <div class="prose prose-sm dark:prose-invert max-w-none">
+                  <div v-if="msg.content" class="markdown-content" v-html="renderMarkdown(msg.content)"></div>
+                  <div v-else-if="!msg.isComplete" class="flex items-center gap-2 text-light-text/50">
+                    <Loader2 class="w-4 h-4 animate-spin" />
+                    <span>{{ languageStore.t.chat.thinking }}</span>
+                  </div>
+                </div>
+
+                <!-- Sources -->
+                <Transition name="fade-slide">
+                  <div v-if="msg.isComplete && msg.sources && msg.sources.length > 0" class="mt-4 pt-4 border-t border-light-border dark:border-dark-border">
+                    <h4 class="text-sm font-medium text-light-text/70 dark:text-dark-text/70 mb-2 flex items-center gap-1">
+                      <FileText class="w-4 h-4" />
+                      {{ languageStore.t.chat.sources }}
+                    </h4>
+                    <div class="space-y-2">
+                      <div
+                        v-for="source in msg.sources"
+                        :key="source.chunk_id"
+                        class="text-xs p-2 rounded-lg bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border"
+                      >
+                        <div class="font-medium text-cyan-600 dark:text-cyan-400 flex items-center justify-between">
+                          <span>{{ source.doc_name }}</span>
+                          <span class="text-green-500">{{ (source.score * 100).toFixed(0) }}%</span>
+                        </div>
+                        <div class="text-light-text/60 dark:text-dark-text/60 truncate mt-1">{{ source.content }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </Transition>
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Input -->
-    <div class="sticky bottom-0 pt-4 bg-gradient-to-t from-light-bg dark:from-dark-bg via-light-bg/95 dark:via-dark-bg/95 to-transparent">
-      <div class="flex items-end gap-3 p-4 rounded-2xl border border-light-border dark:border-dark-border bg-light-card dark:bg-dark-card shadow-glass">
-        <div class="flex-1 overflow-y-auto" style="max-height: 150px;">
-          <textarea
-            ref="inputRef"
-            v-model="input"
-            :placeholder="languageStore.t.chat.placeholder"
-            rows="1"
-            class="w-full resize-none bg-transparent border-none outline-none text-light-text dark:text-dark-text placeholder:text-gray-400"
-            style="max-height: 150px;"
-            @input="adjustTextareaHeight"
-            @keydown="handleKeydown"
-          ></textarea>
+    <div class="sticky bottom-0 pt-4 pb-4 px-4 bg-gradient-to-t from-light-bg dark:from-dark-bg via-light-bg/95 dark:via-dark-bg/95 to-transparent">
+      <div class="max-w-4xl mx-auto">
+        <div class="relative flex items-end gap-3 p-3 rounded-2xl border border-cyan-500/30 dark:border-cyan-400/30 bg-light-card/80 dark:bg-dark-card/80 backdrop-blur-xl shadow-lg shadow-cyan-500/10">
+          <!-- Glow effect -->
+          <div class="absolute inset-0 rounded-2xl bg-gradient-to-r from-cyan-500/5 to-blue-500/5 pointer-events-none"></div>
+
+          <div class="flex-1 overflow-y-auto" style="max-height: 150px;">
+            <textarea
+              ref="inputRef"
+              v-model="input"
+              :placeholder="languageStore.t.chat.placeholder"
+              rows="1"
+              class="w-full resize-none bg-transparent border-none outline-none text-light-text dark:text-dark-text placeholder:text-gray-400 z-10 relative"
+              style="max-height: 150px;"
+              @input="adjustTextareaHeight"
+              @keydown="handleKeydown"
+            ></textarea>
+          </div>
+
+          <Button
+            :disabled="!input.trim() || !selectedKb || isLoading"
+            :loading="isLoading"
+            @click="sendMessage"
+            class="relative z-10 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 border-0"
+          >
+            <Send class="w-4 h-4" />
+          </Button>
         </div>
-        <Button
-          :disabled="!input.trim() || !selectedKb"
-          :loading="isLoading"
-          @click="sendMessage"
-        >
-          <Send class="w-4 h-4" />
-        </Button>
       </div>
     </div>
   </div>

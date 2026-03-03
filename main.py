@@ -17,7 +17,7 @@ from api.knowledge_base_routes import router as kb_router
 from api.document_routes import router as doc_router
 from api.search_routes import router as search_router
 from api.config_routes import router as config_router
-from api.rag_routes import router as rag_router
+from api.agent_routes import router as agent_router
 
 
 @asynccontextmanager
@@ -134,7 +134,7 @@ def create_app() -> FastAPI:
     app.include_router(doc_router)
     app.include_router(search_router)
     app.include_router(config_router)
-    app.include_router(rag_router)
+    app.include_router(agent_router)
     
     # Health check endpoint
     @app.get("/health")

@@ -32,6 +32,7 @@ class SearchService:
         embedding_provider=None,
         reranker_provider=None,
         llm_provider=None,
+        embedding_batch_size: int = 10,
     ):
         """
         Initialize search service.
@@ -41,11 +42,13 @@ class SearchService:
             embedding_provider: Provider for generating embeddings
             reranker_provider: Provider for reranking results
             llm_provider: Provider for LLM calls
+            embedding_batch_size: Number of chunks to embed in each batch
         """
         self.db = db
         self.embedding_provider = embedding_provider
         self.reranker_provider = reranker_provider
         self.llm_provider = llm_provider
+        self.embedding_batch_size = embedding_batch_size
 
         self.hybrid_retriever = HybridRetriever(embedding_provider)
         self.reranker = Reranker(reranker_provider)
@@ -96,7 +99,7 @@ class SearchService:
             ]
 
             # Build index
-            await self.hybrid_retriever.build_index(chunk_dicts)
+            await self.hybrid_retriever.build_index(chunk_dicts, batch_size=self.embedding_batch_size)
 
             # Retrieve results
             results = await self.hybrid_retriever.retrieve(
@@ -173,7 +176,7 @@ class SearchService:
             ]
 
             # Build index
-            await self.hybrid_retriever.build_index(chunk_dicts)
+            await self.hybrid_retriever.build_index(chunk_dicts, batch_size=self.embedding_batch_size)
 
             # Search with all rewritten queries
             all_results = []

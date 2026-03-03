@@ -244,6 +244,13 @@ After startup, visit:
 
 ## API Endpoints
 
+### Agent Chat (Recommended)
+
+- `POST /api/v1/agent/chat` - Agent chat (non-streaming)
+- `POST /api/v1/agent/chat/stream` - Agent streaming chat (SSE)
+- `GET /api/v1/agent/sessions/{session_id}/history` - Get session history
+- `DELETE /api/v1/agent/sessions/{session_id}` - Clear session history
+
 ### Knowledge Base Management
 
 - `POST /api/knowledge-bases` - Create knowledge base
@@ -262,11 +269,6 @@ After startup, visit:
 
 - `POST /api/search` - Basic hybrid search
 - `POST /api/search/with-rewrite` - Search with query rewriting
-
-### RAG
-
-- `POST /rag/answer` - Generate answer (non-streaming)
-- `POST /rag/answer/stream` - Stream answer generation (SSE)
 
 ### Configuration
 
@@ -452,7 +454,17 @@ Welcome to submit Issues and Pull Requests!
 ## Status
 
 🚧 In Development
-v-0.1.2 -- 26/2/18
+v0.2.1 -- 2026/03/03
+
+### Changelog
+
+#### v0.2.1 (2026-03-03)
+- ✅ Added Agent chat functionality with natural language interaction
+- ✅ Implemented conversation history storage (memory + database dual-layer architecture)
+- ✅ Support for session management and history recovery
+- ✅ Unified Agent API to replace original RAG API
+- ✅ Optimized streaming response experience
+- 🔧 Fixed module import issues
 
 ### Author
 Chasen

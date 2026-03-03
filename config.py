@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     
     # Application Configuration
     app_name: str = "RagDocMan"
-    app_version: str = "0.1.2"
+    app_version: str = "0.2.1"
     debug: bool = False
     log_level: str = "INFO"
     
@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # Chunking Configuration
     chunk_size: int = 1024
     chunk_overlap: int = 128
+    
+    # Embedding Configuration
+    embedding_batch_size: int = 10  # Number of chunks to embed in each batch
     
     # Retrieval Configuration
     retrieval_top_k: int = 10

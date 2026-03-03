@@ -127,12 +127,13 @@ class VectorRetriever:
         self.chunks = []
         self.embeddings = []
 
-    async def build_index(self, chunks: List[Dict]) -> None:
+    async def build_index(self, chunks: List[Dict], batch_size: int = 10) -> None:
         """
         Build vector index from chunks.
 
         Args:
             chunks: List of chunk dicts with 'id', 'content', 'doc_id', 'doc_name'
+            batch_size: Number of chunks to process in each batch (default: 10)
 
         Raises:
             ValueError: If chunks list is empty
@@ -147,12 +148,16 @@ class VectorRetriever:
         self.chunks = chunks
         self.embeddings = []
 
-        # Generate embeddings for all chunks
+        # Generate embeddings in batches to avoid 413 errors
         contents = [chunk.get("content", "") for chunk in chunks]
         try:
-            embeddings = await self.embedding_provider.embed_texts(contents)
-            self.embeddings = embeddings
-            logger.info(f"Vector index built with {len(embeddings)} embeddings")
+            for i in range(0, len(contents), batch_size):
+                batch = contents[i:i + batch_size]
+                batch_embeddings = await self.embedding_provider.embed_texts(batch)
+                self.embeddings.extend(batch_embeddings)
+                logger.info(f"Processed batch {i//batch_size + 1}/{(len(contents) + batch_size - 1)//batch_size}")
+            
+            logger.info(f"Vector index built with {len(self.embeddings)} embeddings")
         except Exception as e:
             logger.error(f"Error building vector index: {str(e)}")
             raise
@@ -274,20 +279,24 @@ class ResultFuser:
         # Sort by RRF score
         sorted_chunks = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
 
-        # Create fused results
+        # Create fused results with normalized scores
         fused_results = []
-        for chunk_id, rrf_score in sorted_chunks:
-            if chunk_id in result_map:
-                result = result_map[chunk_id]
-                # Update score to RRF score
-                fused_result = RetrievalResult(
-                    chunk_id=result.chunk_id,
-                    doc_id=result.doc_id,
-                    content=result.content,
-                    score=rrf_score,
-                    doc_name=result.doc_name,
-                )
-                fused_results.append(fused_result)
+        if len(sorted_chunks) > 0:
+            max_rrf_score = sorted_chunks[0][1]  # Highest RRF score
+            for chunk_id, rrf_score in sorted_chunks:
+                if chunk_id in result_map:
+                    result = result_map[chunk_id]
+                    # Normalize score to 0-1 range (percentage-like)
+                    # Using min-max normalization with a reasonable max
+                    normalized_score = min(rrf_score / max_rrf_score, 1.0) if max_rrf_score > 0 else 0.0
+                    fused_result = RetrievalResult(
+                        chunk_id=result.chunk_id,
+                        doc_id=result.doc_id,
+                        content=result.content,
+                        score=normalized_score,
+                        doc_name=result.doc_name,
+                    )
+                    fused_results.append(fused_result)
 
         logger.info(f"Fused {len(fused_results)} results using RRF")
         return fused_results
@@ -307,12 +316,13 @@ class HybridRetriever:
         self.vector_retriever = VectorRetriever(embedding_provider)
         self.embedding_provider = embedding_provider
 
-    async def build_index(self, chunks: List[Dict]) -> None:
+    async def build_index(self, chunks: List[Dict], batch_size: int = 10) -> None:
         """
         Build indices for both BM25 and vector retrieval.
 
         Args:
             chunks: List of chunk dicts
+            batch_size: Number of chunks to process in each batch for embeddings
 
         Raises:
             ValueError: If chunks list is empty
@@ -325,7 +335,7 @@ class HybridRetriever:
 
         # Build vector index if embedding provider is available
         if self.embedding_provider:
-            await self.vector_retriever.build_index(chunks)
+            await self.vector_retriever.build_index(chunks, batch_size=batch_size)
 
     async def retrieve(
         self, query: str, top_k: int = 10, use_vector: bool = True

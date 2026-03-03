@@ -93,7 +93,11 @@ async def search(request: SearchRequest, db: Session = Depends(get_db)):
                 logger.warning(f"Failed to create embedding provider: {e}")
 
         # Perform search
-        search_service = SearchService(db, embedding_provider)
+        search_service = SearchService(
+            db, 
+            embedding_provider,
+            embedding_batch_size=settings.embedding_batch_size
+        )
         search_response = await search_service.search(
             kb_id=request.kb_id,
             query=request.query,
@@ -199,7 +203,11 @@ async def search_with_rewrite(request: SearchRequest, db: Session = Depends(get_
         await kb_service.get_knowledge_base(db, kb_id=request.kb_id)
         
         # Perform search with rewrite
-        search_service = SearchService(db, embedding_provider)
+        search_service = SearchService(
+            db, 
+            embedding_provider,
+            embedding_batch_size=settings.embedding_batch_size
+        )
         search_response = await search_service.search_with_rewrite(
             kb_id=request.kb_id,
             query=request.query,

@@ -1,7 +1,7 @@
 """ORM models for RagDocMan database."""
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, JSON, Index
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from database import Base
 
@@ -56,3 +56,20 @@ class Chunk(Base):
     # Relationships
     document: Mapped["Document"] = relationship("Document", back_populates="chunks")
     knowledge_base: Mapped["KnowledgeBase"] = relationship("KnowledgeBase", back_populates="chunks")
+
+
+class ConversationHistory(Base):
+    """Conversation history ORM model for storing chat messages."""
+    
+    __tablename__ = "conversation_history"
+    
+    id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    session_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String, nullable=False)  # "user" or "assistant"
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    message_metadata: Mapped[Optional[str]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    __table_args__ = (
+        Index('idx_session_created', 'session_id', 'created_at'),
+    )

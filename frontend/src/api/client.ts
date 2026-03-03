@@ -1,7 +1,8 @@
-import type { Ref } from 'vue'
+// API client for RagDocMan
 
 // Use direct backend URL in dev to bypass Vite proxy buffering
 const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '/api'
+const AGENT_API_BASE = import.meta.env.DEV ? 'http://localhost:8000/api/v1' : '/api/v1'
 
 interface ApiResponse<T> {
   success: boolean
@@ -60,6 +61,7 @@ export interface RagAnswerRequest {
   query: string
   top_k?: number
   include_sources?: boolean
+  session_id?: string
 }
 
 export interface Config {
@@ -68,6 +70,7 @@ export interface Config {
   debug: boolean
   log_level: string
   llm_provider: string
+  llm_model: string
   embedding_provider: string
   embedding_model: string
   reranker_provider: string
@@ -78,6 +81,36 @@ export interface Config {
   chunk_overlap: number
   retrieval_top_k: number
   reranking_top_k: number
+}
+
+// Agent API Types
+export interface AgentMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp?: string
+}
+
+export interface AgentToolCall {
+  tool_name: string
+  tool_input: Record<string, unknown>
+  tool_output: Record<string, unknown>
+  execution_time: number
+}
+
+export interface AgentRequest {
+  user_input: string
+  session_id: string
+  stream?: boolean
+  metadata?: Record<string, unknown>
+}
+
+export interface AgentResponse {
+  success: boolean
+  output: string
+  tool_calls: AgentToolCall[]
+  execution_time: number
+  error?: string
+  timestamp?: string
 }
 
 async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
@@ -267,6 +300,172 @@ export const api = {
         reject(error)
       }
     })
+  },
+
+  // Agent API (new in backend)
+  async sendAgentMessage(
+    userInput: string,
+    sessionId: string,
+    callbacks?: {
+      onToolCall?: (toolCall: AgentToolCall) => void
+      onContent?: (content: string) => void
+      onDone?: (response: AgentResponse) => void
+      onError?: (error: string) => void
+    }
+  ): Promise<AgentResponse> {
+    try {
+      const res = await fetch(`${AGENT_API_BASE}/agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_input: userInput,
+          session_id: sessionId,
+          stream: false
+        })
+      })
+
+      const data = await res.json() as ApiResponse<AgentResponse>
+
+      if (!data.success || !data.data) {
+        throw new Error(data.error?.message || 'Agent request failed')
+      }
+
+      if (callbacks?.onToolCall) {
+        data.data.tool_calls.forEach(tc => callbacks.onToolCall!(tc))
+      }
+
+      if (callbacks?.onContent) {
+        callbacks.onContent(data.data.output)
+      }
+
+      if (callbacks?.onDone) {
+        callbacks.onDone(data.data)
+      }
+
+      return data.data
+    } catch (error) {
+      if (callbacks?.onError) {
+        callbacks.onError(String(error))
+      }
+      throw error
+    }
+  },
+
+  // Agent Streaming
+  streamAgentMessage(
+    userInput: string,
+    sessionId: string,
+    callbacks: {
+      onToolCall?: (toolCall: { type: string; data: AgentToolCall }) => void
+      onContent?: (content: string, type: string) => void
+      onDone?: () => void
+      onError?: (error: string) => void
+    }
+  ): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const res = await fetch(`${AGENT_API_BASE}/agent/chat/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+          },
+          body: JSON.stringify({
+            user_input: userInput,
+            session_id: sessionId,
+            stream: true
+          })
+        })
+
+        if (!res.ok || !res.body) {
+          throw new Error('Stream request failed')
+        }
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value, { stream: true })
+          buffer += chunk
+
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            const trimmedLine = line.trim()
+            if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue
+
+            try {
+              const data = JSON.parse(trimmedLine.slice(6))
+              const chunkType = data.type || 'output'
+
+              if (chunkType === 'tool_call' && callbacks.onToolCall) {
+                callbacks.onToolCall(data)
+              } else if (chunkType === 'output' && callbacks.onContent) {
+                callbacks.onContent(data.data?.output || '', chunkType)
+              } else if (chunkType === 'end' && callbacks.onDone) {
+                callbacks.onDone()
+                resolve()
+                return
+              } else if (chunkType === 'error' && callbacks.onError) {
+                callbacks.onError(data.data?.error || 'Unknown error')
+              }
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
+
+        if (callbacks.onDone) {
+          callbacks.onDone()
+        }
+        resolve()
+      } catch (error) {
+        if (callbacks.onError) {
+          callbacks.onError(String(error))
+        }
+        reject(error)
+      }
+    })
+  },
+
+  // Clear agent session
+  async clearAgentSession(sessionId: string): Promise<ApiResponse<{ success: boolean; message: string; session_id: string }>> {
+    const res = await fetch(`${AGENT_API_BASE}/agent/session/${sessionId}`, {
+      method: 'DELETE'
+    })
+    return handleResponse(res)
+  },
+
+  // List all sessions
+  async listSessions(): Promise<ApiResponse<Array<{
+    session_id: string
+    last_message_at: string
+    preview: string
+    message_count: number
+  }>>> {
+    const res = await fetch(`${AGENT_API_BASE}/agent/sessions`)
+    return handleResponse(res)
+  },
+
+  // Get session history
+  async getSessionHistory(sessionId: string, limit = 50): Promise<ApiResponse<{
+    session_id: string
+    messages: Array<{
+      role: string
+      content: string
+      created_at: string
+    }>
+    message_count: number
+  }>> {
+    const res = await fetch(`${AGENT_API_BASE}/agent/sessions/${sessionId}/history?limit=${limit}`)
+    return handleResponse(res)
   },
 
   // Health

@@ -244,6 +244,13 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ## API 端点
 
+### Agent 对话（推荐）
+
+- `POST /api/v1/agent/chat` - Agent 对话（非流式）
+- `POST /api/v1/agent/chat/stream` - Agent 流式对话（SSE）
+- `GET /api/v1/agent/sessions/{session_id}/history` - 获取会话历史
+- `DELETE /api/v1/agent/sessions/{session_id}` - 清除会话历史
+
 ### 知识库管理
 
 - `POST /api/knowledge-bases` - 创建知识库
@@ -262,11 +269,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 - `POST /api/search` - 基础混合搜索
 - `POST /api/search/with-rewrite` - 带查询改写的搜索
-
-### RAG
-
-- `POST /rag/answer` - 生成答案（非流式）
-- `POST /rag/answer/stream` - 流式生成答案（SSE）
 
 ### 配置
 
@@ -451,7 +453,17 @@ MIT License
 ## 状态
 
 🚧 开发中
-v-0.1.2 -- 26/2/18
+v0.2.1 -- 2026/03/03
+
+### 更新日志
+
+#### v0.2.1 (2026-03-03)
+- ✅ 新增 Agent 对话功能，支持自然语言交互
+- ✅ 实现对话历史存储（内存+数据库双层架构）
+- ✅ 支持会话管理和历史记录恢复
+- ✅ 统一使用 Agent API 替代原 RAG API
+- ✅ 优化流式响应体验
+- 🔧 修复模块导入问题
 
 ### 作者
 Chasen

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { MessageSquare, Trash2, ChevronRight, Bot } from 'lucide-vue-next'
+import { MessageSquare, Trash2, ChevronRight, Bot, Loader2 } from 'lucide-vue-next'
 import { useLanguageStore } from '@/stores/language'
+import { api } from '@/api/client'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 
@@ -10,68 +11,65 @@ const languageStore = useLanguageStore()
 const router = useRouter()
 
 interface Session {
-  id: string
-  kbId: string
-  messages: { role: string; content: string }[]
-  createdAt: string
+  session_id: string
+  last_message_at: string
+  preview: string
+  message_count: number
+}
+
+interface HistoryMessage {
+  role: string
+  content: string
+  created_at: string
 }
 
 const sessions = ref<Session[]>([])
-const selectedSession = ref<Session | null>(null)
+const isLoading = ref(false)
 
-onMounted(() => {
-  loadSessions()
+onMounted(async () => {
+  await loadSessions()
 })
 
-function loadSessions() {
-  const saved = localStorage.getItem('ragdocman_sessions')
-  if (saved) {
-    try {
-      sessions.value = JSON.parse(saved)
-    } catch {
-      sessions.value = []
+async function loadSessions() {
+  isLoading.value = true
+  try {
+    const res = await api.listSessions()
+    if (res.success && res.data) {
+      sessions.value = res.data
     }
+  } catch (error) {
+    console.error('Failed to load sessions:', error)
+  } finally {
+    isLoading.value = false
   }
 }
 
-function deleteSession(id: string) {
-  sessions.value = sessions.value.filter(s => s.id !== id)
-  localStorage.setItem('ragdocman_sessions', JSON.stringify(sessions.value))
+async function deleteSession(sessionId: string) {
+  try {
+    await api.clearAgentSession(sessionId)
+    sessions.value = sessions.value.filter(s => s.session_id !== sessionId)
+  } catch (error) {
+    console.error('Failed to delete session:', error)
+  }
 }
 
 function loadSession(session: Session) {
-  // Save current session first
-  const current = localStorage.getItem('ragdocman_current')
-  if (current) {
-    try {
-      const currentSession = JSON.parse(current)
-      const allSessions = localStorage.getItem('ragdocman_sessions')
-      if (allSessions) {
-        const sessionList = JSON.parse(allSessions)
-        const index = sessionList.findIndex((s: Session) => s.id === currentSession.id)
-        if (index >= 0) {
-          sessionList[index] = currentSession
-          localStorage.setItem('ragdocman_sessions', JSON.stringify(sessionList))
-        }
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
-  // Load selected session
-  selectedSession.value = session
-  localStorage.setItem('ragdocman_current', JSON.stringify(session))
+  // Save selected session ID to localStorage for chat page to use
+  localStorage.setItem('ragdocman_current_session', session.session_id)
   router.push('/')
 }
 
-function clearAllSessions() {
+async function clearAllSessions() {
+  // Clear all sessions one by one
+  for (const session of sessions.value) {
+    await api.clearAgentSession(session.session_id)
+  }
   sessions.value = []
-  localStorage.removeItem('ragdocman_sessions')
-  localStorage.removeItem('ragdocman_current')
+  localStorage.removeItem('ragdocman_current_session')
 }
 
-function formatDate(dateStr: string) {
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return ''
   const date = new Date(dateStr)
   const locale = languageStore.current === 'zh' ? 'zh-CN' : 'en-US'
   return date.toLocaleDateString(locale, {
@@ -82,9 +80,8 @@ function formatDate(dateStr: string) {
   })
 }
 
-function getPreview(messages: { role: string; content: string }[]) {
-  const firstUser = messages.find(m => m.role === 'user')
-  return firstUser?.content?.slice(0, 50) || languageStore.t.sessions.empty
+function getPreviewText(preview: string) {
+  return preview?.slice(0, 50) || languageStore.t.sessions.empty
 }
 </script>
 
@@ -100,7 +97,13 @@ function getPreview(messages: { role: string; content: string }[]) {
       </Button>
     </div>
 
-    <div v-if="sessions.length === 0" class="flex flex-col items-center justify-center h-64 text-center">
+    <!-- Loading state -->
+    <div v-if="isLoading" class="flex items-center justify-center h-64">
+      <Loader2 class="w-8 h-8 animate-spin text-cyan-500" />
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="sessions.length === 0" class="flex flex-col items-center justify-center h-64 text-center">
       <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mb-4">
         <Bot class="w-8 h-8 text-light-cta dark:text-dark-cta" />
       </div>
@@ -112,10 +115,11 @@ function getPreview(messages: { role: string; content: string }[]) {
       </p>
     </div>
 
+    <!-- Session list -->
     <div v-else class="space-y-3">
       <Card
         v-for="session in sessions"
-        :key="session.id"
+        :key="session.session_id"
         hoverable
         class="p-4 cursor-pointer group"
         @click="loadSession(session)"
@@ -124,14 +128,17 @@ function getPreview(messages: { role: string; content: string }[]) {
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 text-sm text-light-text/50 dark:text-dark-text/50 mb-1">
               <Bot class="w-4 h-4" />
-              {{ formatDate(session.createdAt) }}
+              {{ formatDate(session.last_message_at) }}
+              <span class="text-xs text-light-text/30 dark:text-dark-text/30">
+                ({{ session.message_count }} {{ languageStore.current === 'zh' ? '条消息' : 'messages' }})
+              </span>
             </div>
             <p class="text-light-text dark:text-dark-text truncate">
-              {{ getPreview(session.messages) }}
+              {{ getPreviewText(session.preview) }}
             </p>
           </div>
           <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button variant="ghost" size="sm" @click.stop="deleteSession(session.id)">
+            <Button variant="ghost" size="sm" @click.stop="deleteSession(session.session_id)">
               <Trash2 class="w-4 h-4" />
             </Button>
             <ChevronRight class="w-5 h-5 text-light-text/30 dark:text-dark-text/30" />
