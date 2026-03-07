@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Upload, FileText, Trash2, ArrowLeft, Loader2 } from 'lucide-vue-next'
+import { Upload, FileText, Trash2, ArrowLeft } from 'lucide-vue-next'
 import { api, type Document, type KnowledgeBase } from '@/api/client'
 import { useLanguageStore } from '@/stores/language'
 import Card from '@/components/ui/Card.vue'
@@ -16,6 +16,11 @@ const documents = ref<Document[]>([])
 const knowledgeBase = ref<KnowledgeBase | null>(null)
 const loading = ref(false)
 const uploading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+function triggerFileInput() {
+  fileInput.value?.click()
+}
 
 onMounted(async () => {
   await Promise.all([loadKnowledgeBase(), loadDocuments()])
@@ -58,7 +63,7 @@ async function handleUpload(event: Event) {
 }
 
 async function deleteDocument(doc: Document) {
-  if (!confirm(languageStore.current === 'zh' ? `删除 "${doc.name}"？` : `Delete "${doc.name}"?`)) return
+  if (!confirm(languageStore.current === 'zh' ? `Delete "${doc.name}"?` : `Delete "${doc.name}"?`)) return
 
   const res = await api.deleteDocument(kbId, doc.id)
   if (res.success) {
@@ -87,80 +92,95 @@ function formatDate(dateStr: string) {
   })
 }
 
-function getFileIcon(type: string) {
+function getFileIcon(_type: string) {
   return FileText
 }
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-4rem)] max-w-5xl mx-auto px-4 py-8">
+  <div class="min-h-[calc(100vh-4rem)] max-w-4xl mx-auto px-4 py-8">
     <!-- Header -->
-    <div class="flex items-center gap-4 mb-6">
+    <div class="flex items-center gap-3 mb-6">
       <Button variant="ghost" size="sm" @click="goBack">
         <ArrowLeft class="w-4 h-4" />
       </Button>
       <div class="flex-1">
-        <h1 class="font-title text-2xl font-bold text-light-text dark:text-dark-text">
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
           {{ knowledgeBase?.name || languageStore.t.documents.title }}
         </h1>
-        <p v-if="knowledgeBase?.description" class="text-sm text-light-text/60 dark:text-dark-text/60">
+        <p v-if="knowledgeBase?.description" class="text-sm text-gray-500 dark:text-gray-400">
           {{ knowledgeBase.description }}
         </p>
       </div>
       <label class="cursor-pointer">
-        <input type="file" accept=".pdf,.docx,.doc,.md" class="hidden" @change="handleUpload" :disabled="uploading" />
-        <Button :loading="uploading">
+        <input
+          type="file"
+          accept=".pdf,.docx,.doc,.md"
+          class="hidden"
+          @change="handleUpload"
+          :disabled="uploading"
+          ref="fileInput"
+        />
+        <button
+          type="button"
+          :disabled="uploading"
+          class="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50"
+          @click="triggerFileInput"
+        >
           <Upload class="w-4 h-4" />
-          {{ languageStore.t.documents.upload }}
-        </Button>
+          {{ uploading ? languageStore.t.documents.uploading : languageStore.t.documents.upload }}
+        </button>
       </label>
     </div>
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center h-32">
-      <div class="animate-spin w-8 h-8 border-2 border-light-cta border-t-transparent rounded-full"></div>
+      <div class="animate-spin w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>
     </div>
 
     <!-- Empty -->
     <div v-else-if="documents.length === 0" class="flex flex-col items-center justify-center h-64 text-center">
-      <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mb-4">
-        <FileText class="w-8 h-8 text-light-cta dark:text-dark-cta" />
+      <div class="w-14 h-14 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+        <FileText class="w-7 h-7 text-gray-500 dark:text-gray-400" />
       </div>
-      <h2 class="text-xl font-title font-semibold text-light-text dark:text-dark-text mb-2">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
         {{ languageStore.t.documents.noDocuments }}
       </h2>
-      <p class="text-light-text/60 dark:text-dark-text/60 mb-4">
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
         {{ languageStore.t.documents.noDocumentsDesc }}
       </p>
     </div>
 
     <!-- Document List -->
-    <div v-else class="space-y-3">
+    <div v-else class="space-y-2">
       <Card
         v-for="doc in documents"
         :key="doc.id"
-        class="p-4"
+        hoverable
+        class="p-3.5"
       >
         <div class="flex items-center justify-between">
-          <div class="flex items-center gap-4 min-w-0">
-            <div class="w-10 h-10 rounded-lg bg-light-cta/10 dark:bg-dark-cta/10 flex items-center justify-center flex-shrink-0">
-              <component :is="getFileIcon(doc.file_type)" class="w-5 h-5 text-light-cta dark:text-dark-cta" />
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+              <component :is="getFileIcon(doc.file_type)" class="w-4 h-4 text-gray-500 dark:text-gray-400" />
             </div>
             <div class="min-w-0">
-              <h3 class="font-medium text-light-text dark:text-dark-text truncate">{{ doc.name }}</h3>
-              <div class="flex items-center gap-3 text-sm text-light-text/50 dark:text-dark-text/50">
-                <span>{{ doc.file_type.toUpperCase() }}</span>
+              <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{{ doc.name }}</h3>
+              <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <span class="uppercase">{{ doc.file_type }}</span>
+                <span>•</span>
                 <span>{{ formatSize(doc.file_size) }}</span>
+                <span>•</span>
                 <span>{{ doc.chunk_count }} {{ languageStore.t.documents.chunks }}</span>
               </div>
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-light-text/50 dark:text-dark-text/50">
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-400 dark:text-gray-500">
               {{ formatDate(doc.created_at) }}
             </span>
             <Button variant="ghost" size="sm" @click="deleteDocument(doc)">
-              <Trash2 class="w-4 h-4" />
+              <Trash2 class="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>

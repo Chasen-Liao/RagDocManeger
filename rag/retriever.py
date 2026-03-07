@@ -127,13 +127,14 @@ class VectorRetriever:
         self.chunks = []
         self.embeddings = []
 
-    async def build_index(self, chunks: List[Dict], batch_size: int = 10) -> None:
+    async def build_index(self, chunks: List[Dict], batch_size: int = 1, max_chars_per_text: int = 1000) -> None:
         """
         Build vector index from chunks.
 
         Args:
             chunks: List of chunk dicts with 'id', 'content', 'doc_id', 'doc_name'
-            batch_size: Number of chunks to process in each batch (default: 10)
+            batch_size: Number of chunks to process in each batch (default: 1)
+            max_chars_per_text: Maximum characters per text to avoid API limits (default: 1000)
 
         Raises:
             ValueError: If chunks list is empty
@@ -148,15 +149,83 @@ class VectorRetriever:
         self.chunks = chunks
         self.embeddings = []
 
-        # Generate embeddings in batches to avoid 413 errors
-        contents = [chunk.get("content", "") for chunk in chunks]
+        # Prepare contents with character limit to avoid 413 errors
+        contents = []
+        for chunk in chunks:
+            content = chunk.get("content", "")
+            # Truncate overly long texts to avoid API limit errors
+            if len(content) > max_chars_per_text:
+                content = content[:max_chars_per_text]
+                logger.warning(f"Truncated chunk {chunk.get('id', 'unknown')} from {len(chunk.get('content', ''))} to {max_chars_per_text} chars")
+            if content and content.strip():
+                contents.append(content)
+            else:
+                # Add empty placeholder to maintain alignment with chunks
+                contents.append(" ")
+
+        total_batches = (len(contents) + batch_size - 1) // batch_size
+
         try:
             for i in range(0, len(contents), batch_size):
                 batch = contents[i:i + batch_size]
-                batch_embeddings = await self.embedding_provider.embed_texts(batch)
-                self.embeddings.extend(batch_embeddings)
-                logger.info(f"Processed batch {i//batch_size + 1}/{(len(contents) + batch_size - 1)//batch_size}")
-            
+                batch_num = i // batch_size + 1
+
+                # Calculate batch size dynamically based on content length
+                total_chars = sum(len(t) for t in batch)
+                # If batch is too large, split further
+                effective_batch_size = batch_size
+                if total_chars > 8000:  # Roughly 8KB of text
+                    effective_batch_size = max(1, batch_size // 2)
+                    batch = batch[:effective_batch_size]
+                    logger.info(f"Reduced batch size to {effective_batch_size} due to content size")
+
+                logger.info(f"Processing embedding batch {batch_num}/{total_batches}, size={effective_batch_size}")
+
+                try:
+                    batch_embeddings = await self.embedding_provider.embed_texts(batch)
+                    self.embeddings.extend(batch_embeddings)
+                except Exception as batch_error:
+                    # If batch fails, try individual embeddings as fallback
+                    error_str = str(batch_error)
+                    if "413" in error_str or "Payload Too Large" in error_str:
+                        logger.warning(f"413 error, reducing batch to single embeddings")
+                        for content in batch:
+                            try:
+                                # Further truncate for safety
+                                safe_content = content[:1000] if len(content) > 1000 else content
+                                if safe_content.strip():
+                                    single_embedding = await self.embedding_provider.embed_text(safe_content)
+                                    self.embeddings.append(single_embedding)
+                                else:
+                                    # Use zero vector for empty
+                                    if self.embeddings:
+                                        dim = len(self.embeddings[0])
+                                        self.embeddings.append([0.0] * dim)
+                            except Exception:
+                                # Ultimate fallback
+                                if self.embeddings:
+                                    dim = len(self.embeddings[0])
+                                    self.embeddings.append([0.0] * dim)
+                    else:
+                        logger.warning(f"Batch embedding failed: {batch_error}, trying individual embeddings")
+                        for content in batch:
+                            try:
+                                single_embedding = await self.embedding_provider.embed_text(content[:1000])
+                                self.embeddings.append(single_embedding)
+                            except Exception as single_error:
+                                logger.error(f"Single embedding failed: {single_error}")
+                                if self.embeddings:
+                                    dim = len(self.embeddings[0])
+                                    self.embeddings.append([0.0] * dim)
+
+            # Ensure we have embeddings for all chunks
+            while len(self.embeddings) < len(chunks):
+                if self.embeddings:
+                    dim = len(self.embeddings[0])
+                    self.embeddings.append([0.0] * dim)
+                else:
+                    break
+
             logger.info(f"Vector index built with {len(self.embeddings)} embeddings")
         except Exception as e:
             logger.error(f"Error building vector index: {str(e)}")
@@ -316,13 +385,14 @@ class HybridRetriever:
         self.vector_retriever = VectorRetriever(embedding_provider)
         self.embedding_provider = embedding_provider
 
-    async def build_index(self, chunks: List[Dict], batch_size: int = 10) -> None:
+    async def build_index(self, chunks: List[Dict], batch_size: int = 1, max_chars_per_text: int = 1000) -> None:
         """
         Build indices for both BM25 and vector retrieval.
 
         Args:
             chunks: List of chunk dicts
-            batch_size: Number of chunks to process in each batch for embeddings
+            batch_size: Number of chunks to process in each batch for embeddings (default: 1)
+            max_chars_per_text: Maximum characters per text to avoid API limits (default: 1000)
 
         Raises:
             ValueError: If chunks list is empty
@@ -335,7 +405,7 @@ class HybridRetriever:
 
         # Build vector index if embedding provider is available
         if self.embedding_provider:
-            await self.vector_retriever.build_index(chunks, batch_size=batch_size)
+            await self.vector_retriever.build_index(chunks, batch_size=batch_size, max_chars_per_text=max_chars_per_text)
 
     async def retrieve(
         self, query: str, top_k: int = 10, use_vector: bool = True

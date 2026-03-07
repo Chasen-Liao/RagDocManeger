@@ -641,7 +641,13 @@ class RAGGenerateTool(BaseRagDocManTool):
                 
                 # Still generate answer but inform about lack of context
                 prompt = self._build_prompt(question, "")
-                answer = await self.llm_provider.generate(prompt)
+                # Support both custom LLMProvider and LangChain ChatOpenAI
+                from langchain_core.language_models import BaseChatModel
+                if isinstance(self.llm_provider, BaseChatModel):
+                    response = await self.llm_provider.ainvoke(prompt)
+                    answer = response.content if hasattr(response, 'content') else str(response)
+                else:
+                    answer = await self.llm_provider.generate(prompt)
                 
                 return self._create_success_output(
                     message="已生成答案（未找到相关文档）",
@@ -699,7 +705,15 @@ class RAGGenerateTool(BaseRagDocManTool):
                 )
             else:
                 # Non-streaming mode
-                answer = await self.llm_provider.generate(prompt)
+                # Support both custom LLMProvider and LangChain ChatOpenAI
+                from langchain_core.language_models import BaseChatModel
+                if isinstance(self.llm_provider, BaseChatModel):
+                    # LangChain ChatOpenAI - use invoke
+                    response = await self.llm_provider.ainvoke(prompt)
+                    answer = response.content if hasattr(response, 'content') else str(response)
+                else:
+                    # Custom LLMProvider
+                    answer = await self.llm_provider.generate(prompt)
                 
                 # Step 5: Extract sources for citation (Requirement 9.4)
                 sources = self._extract_sources(formatted_results)
@@ -791,11 +805,19 @@ class RAGGenerateTool(BaseRagDocManTool):
             
             context = self._build_context(formatted_results)
             prompt = self._build_prompt(question, context)
-            
-            # Stream answer generation
+
+            # Stream answer generation - support both custom and LangChain providers
             logger.info(f"[{self.name}] Starting streaming generation")
-            async for chunk in self.llm_provider.generate_stream(prompt):
-                yield chunk
+            from langchain_core.language_models import BaseChatModel
+            if isinstance(self.llm_provider, BaseChatModel):
+                # LangChain ChatOpenAI - use astream
+                async for chunk in self.llm_provider.astream(prompt):
+                    content = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                    yield content
+            else:
+                # Custom LLMProvider
+                async for chunk in self.llm_provider.generate_stream(prompt):
+                    yield chunk
             
             logger.info(f"[{self.name}] Streaming generation completed")
             

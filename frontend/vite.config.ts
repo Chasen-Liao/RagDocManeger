@@ -16,9 +16,8 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
-        configure: (proxy, options) => {
-          proxy.on('proxyRes', (proxyRes, req, res) => {
-            // Ensure streaming responses aren't buffered
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
             proxyRes.headers['x-accel-buffering'] = 'no'
           })
         }

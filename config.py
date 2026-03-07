@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = 128
     
     # Embedding Configuration
-    embedding_batch_size: int = 10  # Number of chunks to embed in each batch
+    embedding_batch_size: int = 2  # Number of chunks to embed in each batch (reduced to avoid 413 errors)
     
     # Retrieval Configuration
     retrieval_top_k: int = 10

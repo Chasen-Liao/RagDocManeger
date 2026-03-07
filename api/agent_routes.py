@@ -11,9 +11,7 @@ from datetime import datetime
 from logger import logger
 from rag.agent_manager_core import AgentManager, AgentResult
 from rag.agent_service_integration import ServiceRegistry
-from core.llm_provider import LLMProvider
-from core.embedding_provider import EmbeddingProvider
-from core.reranker_provider import RerankerProvider
+from core.reranker_provider import RerankerProvider, RerankerProviderFactory
 from database import get_db
 from sqlalchemy.orm import Session
 
@@ -24,6 +22,7 @@ class AgentRequest(BaseModel):
     user_input: str = Field(..., description="User input message")
     session_id: str = Field(..., description="Session ID for conversation context")
     stream: bool = Field(default=False, description="Whether to stream the response")
+    kb_id: Optional[str] = Field(default=None, description="Knowledge base ID to search in")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Optional metadata")
 
 
@@ -73,41 +72,148 @@ def get_agent_manager(db: Session = Depends(get_db)) -> AgentManager:
     try:
         # Get providers from configuration
         from config import settings
-        
-        llm_provider = LLMProvider(
-            provider=settings.llm_provider,
-            model=settings.llm_model,
-            api_key=settings.llm_api_key
+        from core.llm_provider import LLMProviderFactory
+        from core.embedding_provider import EmbeddingProviderFactory
+        from tools import (
+            CreateKnowledgeBaseTool,
+            ListKnowledgeBasesTool,
+            GetKnowledgeBaseTool,
+            UpdateKnowledgeBaseTool,
+            DeleteKnowledgeBaseTool,
+            UploadDocumentTool,
+            ListDocumentsTool,
+            GetDocumentTool,
+            UpdateDocumentTool,
+            DeleteDocumentTool,
+            SearchTool,
+            SearchWithRewriteTool,
+            RAGGenerateTool,
         )
+
+        # Create LLM using ChatOpenAI (OpenAI-compatible API for SiliconFlow)
+        # This is required for proper tool calling support in LangGraph
+        llm = None
+        if settings.llm_api_key:
+            try:
+                from langchain_openai import ChatOpenAI
+                llm = ChatOpenAI(
+                    model=settings.llm_model or "Qwen/Qwen2-7B-Instruct",
+                    api_key=settings.llm_api_key,
+                    base_url="https://api.siliconflow.cn/v1",
+                    temperature=0.7,
+                    max_tokens=2048,
+                    timeout=60
+                )
+                logger.info(f"ChatOpenAI initialized with model: {settings.llm_model or 'Qwen/Qwen2-7B-Instruct'}")
+                logger.info(f"LLM type: {type(llm)}, bind_tools available: {hasattr(llm, 'bind_tools')}")
+            except Exception as e:
+                logger.error(f"Failed to create ChatOpenAI: {e}")
+                # Fallback to custom provider
+                try:
+                    llm_provider = LLMProviderFactory.create_provider(
+                        provider_type=settings.llm_provider or "siliconflow",
+                        api_key=settings.llm_api_key,
+                        model=settings.llm_model or "Qwen/Qwen2-7B-Instruct"
+                    )
+                    from core.langchain_llm_wrapper import LangChainLLMWrapper
+                    llm = LangChainLLMWrapper(llm_provider=llm_provider, model_name=settings.llm_model or "Qwen/Qwen2-7B-Instruct")
+                    logger.warning(f"Using fallback LangChainLLMWrapper - tool calling may not work: {type(llm)}")
+                except Exception as fallback_error:
+                    logger.error(f"Fallback also failed: {fallback_error}")
+        else:
+            logger.warning("LLM API key not configured")
+
+        # Create embedding provider
+        embedding_provider = None
+        if settings.embedding_api_key:
+            try:
+                embedding_provider = EmbeddingProviderFactory.create_provider(
+                    provider_type=settings.embedding_provider or "siliconflow",
+                    api_key=settings.embedding_api_key,
+                    model=settings.embedding_model or "BAAI/bge-small-zh-v1.5"
+                )
+            except Exception as e:
+                logger.error(f"Failed to create embedding provider: {e}")
+        else:
+            logger.warning("Embedding API key not configured")
         
-        embedding_provider = EmbeddingProvider(
-            provider=settings.embedding_provider,
-            model=settings.embedding_model
-        )
-        
+        # Create reranker provider only if fully configured
         reranker_provider = None
-        if settings.reranker_provider:
-            reranker_provider = RerankerProvider(
-                provider=settings.reranker_provider,
-                model=settings.reranker_model
-            )
+        if settings.reranker_provider and settings.embedding_api_key and settings.reranker_model:
+            try:
+                reranker_provider = RerankerProviderFactory.create_provider(
+                    provider_type=settings.reranker_provider,
+                    api_key=settings.embedding_api_key,
+                    model=settings.reranker_model
+                )
+                logger.info(f"Reranker provider created: {settings.reranker_model}")
+            except Exception as e:
+                logger.warning(f"Failed to create reranker provider: {e}")
         
-        # Initialize service registry
+        # Initialize service registry (uses llm for RAG generation)
+        from core.llm_provider import LLMProvider
         ServiceRegistry.initialize(
             db_session=db,
-            llm_provider=llm_provider,
+            llm_provider=llm if isinstance(llm, LLMProvider) else None,
             embedding_provider=embedding_provider,
             reranker_provider=reranker_provider
         )
         
-        # Create AgentManager
-        agent_manager = AgentManager(
-            llm_provider=llm_provider,
-            embedding_provider=embedding_provider,
-            reranker_provider=reranker_provider,
-            db=db
-        )
+        # Get services from registry
+        integration = ServiceRegistry.get_integration()
+        search_service = integration.search_service
         
+        # Initialize vector store
+        from core.vector_store import VectorStore
+        vector_store = VectorStore()
+        
+        # Create tools with appropriate dependencies
+        tools = [
+            # Knowledge base tools (only need db_session)
+            CreateKnowledgeBaseTool(db_session=db),
+            ListKnowledgeBasesTool(db_session=db),
+            GetKnowledgeBaseTool(db_session=db),
+            UpdateKnowledgeBaseTool(db_session=db),
+            DeleteKnowledgeBaseTool(db_session=db),
+            # Document tools (need db_session, vector_store, and optionally embedding_provider)
+            UploadDocumentTool(
+                db_session=db,
+                vector_store=vector_store,
+                embedding_provider=embedding_provider
+            ),
+            ListDocumentsTool(db_session=db, vector_store=vector_store),
+            GetDocumentTool(db_session=db, vector_store=vector_store),
+            UpdateDocumentTool(
+                db_session=db,
+                vector_store=vector_store,
+                embedding_provider=embedding_provider
+            ),
+            DeleteDocumentTool(db_session=db, vector_store=vector_store),
+            # Search tools (need search_service and optionally llm for RAG)
+            SearchTool(search_service=search_service),
+            SearchWithRewriteTool(search_service=search_service),
+            RAGGenerateTool(
+                search_service=search_service,
+                llm_provider=llm  # Use ChatOpenAI instance
+            ),
+        ]
+
+        # Create conversation memory for persistent storage
+        from core.persistent_conversation_memory import PersistentConversationMemory
+        memory = PersistentConversationMemory(
+            session_id="",  # Will be set per-request
+            db_session=db,
+            max_history=20,
+            auto_save=True
+        )
+
+        # Create AgentManager with correct parameters
+        agent_manager = AgentManager(
+            llm_provider=llm,  # Use ChatOpenAI for proper tool calling
+            tools=tools,
+            memory=memory
+        )
+
         return agent_manager
     
     except Exception as e:
@@ -195,27 +301,36 @@ async def chat_stream(
     async def generate():
         """Generate streaming response chunks."""
         try:
-            logger.info(f"Stream chat request: session_id={request.session_id}")
-            
+            logger.info(f"Stream chat request START: session_id={request.session_id}, input={request.user_input[:30]}")
+
             # Send start event
-            yield f"data: {json.dumps({'type': 'start', 'session_id': request.session_id})}\n\n"
-            
+            logger.info("Yielding start event...")
+            start_chunk = StreamChunk(type="start", data={"session_id": request.session_id})
+            yield f"data: {start_chunk.model_dump_json()}\n\n"
+
             # Stream agent response
+            logger.info(f"Calling agent_manager.astream() with kb_id={request.kb_id}...")
+            chunk_count = 0
             async for chunk in agent_manager.astream(
                 user_input=request.user_input,
-                session_id=request.session_id
+                session_id=request.session_id,
+                kb_id=request.kb_id
             ):
-                # Format chunk as SSE
+                chunk_count += 1
+                # Only log non-output chunks to reduce noise
+                chunk_type = chunk.get("type", "output")
+                if chunk_type != "output":
+                    logger.info(f"Got chunk {chunk_count}: {chunk_type}")
+
+                # Format chunk as SSE - include output_type for thinking vs final_answer
+                chunk_data = chunk.get("data", chunk)
                 stream_chunk = StreamChunk(
-                    type=chunk.get("type", "output"),
-                    data=chunk
+                    type=chunk_type,
+                    data={**chunk_data, "output_type": chunk.get("output_type", "final_answer")}
                 )
                 yield f"data: {stream_chunk.model_dump_json()}\n\n"
-            
-            # Send end event
-            yield f"data: {json.dumps({'type': 'end', 'session_id': request.session_id})}\n\n"
-            
-            logger.info(f"Stream chat completed: session_id={request.session_id}")
+
+            logger.info(f"Stream chat completed: {chunk_count} chunks, session_id={request.session_id}")
         
         except Exception as e:
             logger.error(f"Stream chat failed: {str(e)}")

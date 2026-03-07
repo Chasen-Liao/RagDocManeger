@@ -2,20 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Anthropic-inspired design system */
 :root {
-  --color-bg: #F8FAFC;
+  /* Light mode - warm neutrals */
+  --color-bg: #F7F7F5;
   --color-card: #FFFFFF;
-  --color-cta: #2563EB;
-  --color-text: #1E293B;
-  --color-border: #E2E8F0;
+  --color-cta: #0A35CC;
+  --color-text: #31312D;
+  --color-text-secondary: #6B6B65;
+  --color-border: #E8E8E6;
+
+  /* Semantic colors */
+  --color-success: #0D7A33;
+  --color-warning: #946300;
+  --color-error: #C03030;
 }
 
 .dark {
-  --color-bg: #0F172A;
-  --color-card: #1E293B;
-  --color-cta: #3B82F6;
-  --color-text: #F1F5F9;
-  --color-border: #334155;
+  /* Dark mode - warm, rich dark tones */
+  --color-bg: #0D0D0C;
+  --color-card: #1A1A19;
+  --color-cta: #7096FF;
+  --color-text: #EAEAE8;
+  --color-text-secondary: #989894;
+  --color-border: #3A3A38;
+
+  /* Semantic colors */
+  --color-success: #39D353;
+  --color-warning: #F5D547;
+  --color-error: #FF6B6B;
+}
+
+/* Base styles */
+html {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -23,22 +46,27 @@ body {
   color: var(--color-text);
   transition: background-color 0.2s ease, color 0.2s ease;
   min-height: 100vh;
+  line-height: 1.5;
 }
 
-/* Glass morphism */
-.glass {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+/* Subtle background texture */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 50% 0%, rgba(0,0,0,0.02) 0%, transparent 50%);
+  z-index: -1;
 }
 
-.dark .glass {
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+.dark body::before {
+  background-image: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.015) 0%, transparent 50%);
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - minimal and refined */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -49,20 +77,55 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.3);
+  background: rgba(142, 142, 135, 0.25);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.5);
+  background: rgba(142, 142, 135, 0.45);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.3);
+  background: rgba(113, 113, 107, 0.25);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 85, 105, 0.5);
+  background: rgba(113, 113, 107, 0.45);
+}
+
+/* Focus states - Anthropic uses subtle rings */
+*:focus-visible {
+  outline: 2px solid var(--color-cta);
+  outline-offset: 1px;
+}
+
+/* Selection colors */
+::selection {
+  background: rgba(75, 122, 255, 0.2);
+  color: var(--color-text);
+}
+
+.dark ::selection {
+  background: rgba(112, 150, 255, 0.25);
+  color: var(--color-text);
+}
+
+/* Link styles */
+a {
+  color: var(--color-cta);
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+a:hover {
+  opacity: 0.75;
+}
+
+/* Code blocks */
+code {
+  font-family: 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
+  font-size: 0.85em;
+  letter-spacing: -0.02em;
 }
 
 /* Animation for reduced motion */
@@ -74,4 +137,165 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Base font sizes for better readability */
+html {
+  font-size: 15px;
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+/* Smooth transitions for interactive elements */
+button, a, input, select, textarea {
+  transition: all 0.15s ease;
+}
+
+/* Subtle backdrop for header */
+.backdrop-header {
+  background: rgba(247, 247, 245, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .backdrop-header {
+  background: rgba(13, 13, 12, 0.85);
+}
+
+/* Card hover state */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-1px);
+}
+
+/* Utility classes */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Markdown content styling - Anthropic style */
+.markdown-content p {
+  margin-bottom: 1em;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  color: var(--color-text);
+}
+
+.markdown-content h1 { font-size: 1.5em; }
+.markdown-content h2 { font-size: 1.3em; }
+.markdown-content h3 { font-size: 1.1em; }
+
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.markdown-content li {
+  margin-bottom: 0.35em;
+}
+
+.markdown-content code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.dark .markdown-content code {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.markdown-content pre {
+  background: #F7F7F5;
+  border: 1px solid #E8E8E6;
+  border-radius: 8px;
+  padding: 1em;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.dark .markdown-content pre {
+  background: #1A1A19;
+  border-color: #3A3A38;
+}
+
+.markdown-content pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid #E8E8E6;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: var(--color-text-secondary);
+}
+
+.dark .markdown-content blockquote {
+  border-color: #3A3A38;
+}
+
+.markdown-content a {
+  color: #0A35CC;
+  text-decoration: underline;
+}
+
+.dark .markdown-content a {
+  color: #7096FF;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid #E8E8E6;
+  margin: 1.5em 0;
+}
+
+.dark .markdown-content hr {
+  border-color: #3A3A38;
+}
+
+/* Details/summary styling for thinking collapse */
+details > summary {
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
 }

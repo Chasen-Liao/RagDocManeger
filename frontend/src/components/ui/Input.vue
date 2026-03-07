@@ -6,7 +6,7 @@ interface Props {
   disabled?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   placeholder: '',
   type: 'text',
   disabled: false
@@ -29,7 +29,7 @@ function handleInput(event: Event) {
     :value="modelValue"
     :placeholder="placeholder"
     :disabled="disabled"
-    class="w-full px-4 py-2.5 rounded-lg border border-light-border dark:border-dark-border bg-light-card dark:bg-dark-card text-light-text dark:text-dark-text placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-light-cta/50 dark:focus:ring-dark-cta/50 focus:border-light-cta dark:focus:border-dark-cta transition-all duration-200"
+    class="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 dark:focus:ring-gray-500 dark:focus:border-gray-500 transition-all duration-150"
     @input="handleInput"
     @keydown="emit('keydown', $event)"
   />

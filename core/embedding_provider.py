@@ -123,6 +123,10 @@ class SiliconFlowEmbeddingProvider(EmbeddingProvider):
                 "Content-Type": "application/json",
             }
 
+            # Log request details for debugging
+            total_chars = sum(len(t) for t in texts)
+            logger.info(f"Embedding request: {len(texts)} texts, total {total_chars} chars, model: {self.model}")
+
             payload = {
                 "model": self.model,
                 "input": texts,
@@ -141,6 +145,7 @@ class SiliconFlowEmbeddingProvider(EmbeddingProvider):
                     error_msg = error_data.get("error", {}).get("message", error_msg)
                 except Exception:
                     pass
+                logger.error(f"Embedding API error: {error_msg}, request: {len(texts)} texts, {total_chars} chars")
                 raise Exception(error_msg)
 
             data = response.json()

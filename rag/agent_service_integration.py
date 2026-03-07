@@ -87,10 +87,15 @@ class AgentServiceIntegration:
         from services.knowledge_base_service import KnowledgeBaseService
         from services.document_service import DocumentService
         from services.search_service import SearchService
-        
+        from core.vector_store import VectorStore
+
+        # Initialize vector store
+        vector_store = VectorStore()
+
         self.knowledge_base_service = KnowledgeBaseService()
         self.document_service = DocumentService(
             db=db_session,
+            vector_store=vector_store,
             embedding_provider=embedding_provider
         )
         self.search_service = SearchService(

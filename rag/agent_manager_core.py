@@ -119,17 +119,25 @@ class AgentManager:
         self.config = config or AgentConfig()
         self.enable_performance_monitoring = enable_performance_monitoring
         self.enable_debug = enable_debug
-        
+
         # Initialize performance monitor
         self.performance_monitor = get_performance_monitor()
         if enable_debug:
             self.performance_monitor.enable_debug = True
-        
-        # Wrap LLM provider for LangChain compatibility
-        self.llm = LangChainLLMWrapper(
-            llm_provider=llm_provider,
-            model_name="custom"
-        )
+
+        # Check if llm_provider is already a LangChain-compatible ChatModel
+        from langchain_core.language_models import BaseChatModel
+        if isinstance(llm_provider, BaseChatModel):
+            # Already LangChain compatible - use directly (supports bind_tools)
+            self.llm = llm_provider
+            logger.info(f"Using LangChain-compatible ChatModel directly: {type(llm_provider)}")
+        else:
+            # Wrap LLM provider for LangChain compatibility
+            self.llm = LangChainLLMWrapper(
+                llm_provider=llm_provider,
+                model_name="custom"
+            )
+            logger.info("Using LangChainLLMWrapper for custom provider")
         
         # Create agent executor
         self.agent_executor = self._create_agent_executor()
@@ -144,58 +152,44 @@ class AgentManager:
     
     def _create_agent_executor(self):
         """Create Agent Executor using LangChain 1.x."""
-        prompt = self._create_prompt_template()
-        
+        # Use a generic system prompt - kb_id will be passed in the user input
+        # This is more efficient than recreating the agent for each request
+        system_prompt = """你是一个智能助手，专门帮助用户管理知识库和文档。
+
+你可以使用的工具：
+- list_knowledge_bases: 列出所有知识库
+- search: 在指定知识库中搜索文档内容（需要 kb_id 参数）
+- rag_generate: 基于知识库内容回答问题（需要 kb_id 参数）
+
+重要提示：
+- 用户输入中可能包含 [知识库ID: xxx] 的信息，请从中提取 kb_id
+- 搜索或问答前，必须先调用 list_knowledge_bases 获取用户有哪些知识库
+- 根据用户的问题，选择合适的知识库进行搜索或问答
+- kb_id 是知识库的 ID，你必须从 list_knowledge_bases 的结果中选择正确的 ID
+
+请用中文回复用户。如果需要使用工具来完成用户的请求，请直接调用相关工具。
+
+回答要求：
+1. 如果用户要搜索或问答，先用 list_knowledge_bases 列出知识库
+2. 根据用户的问题选择合适的知识库（根据知识库名称判断）
+3. 使用 search 或 rag_generate 工具进行搜索/问答
+4. 基于搜索结果给出准确的回答
+5. 回答要简洁明了，用中文"""
+
         agent = create_agent(
             model=self.llm,
             tools=self.tools,
-            system_prompt=prompt.template if hasattr(prompt, 'template') else str(prompt)
+            system_prompt=system_prompt
         )
-        
+
         return agent
-    
-    def _create_prompt_template(self) -> PromptTemplate:
-        """Create prompt template for the agent."""
-        template = """You are a helpful AI assistant for managing knowledge bases and documents.
-You have access to various tools to help users with their requests.
-
-When a user asks you to perform an action:
-1. Understand their intent clearly
-2. Choose the appropriate tool(s) to use
-3. Execute the tool(s) with correct parameters
-4. Provide clear feedback about the results
-
-Available tools:
-{tools}
-
-Tool names: {tool_names}
-
-Use the following format:
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-Begin!
-
-Question: {input}
-Thought: {agent_scratchpad}"""
-        
-        return PromptTemplate(
-            input_variables=["input", "agent_scratchpad", "tools", "tool_names"],
-            template=template
-        )
     
     async def ainvoke(
         self,
         user_input: str,
         session_id: str,
-        stream: bool = False
+        stream: bool = False,
+        kb_id: Optional[str] = None
     ) -> AgentResult:
         """Asynchronously invoke the agent.
         
@@ -214,9 +208,15 @@ Thought: {agent_scratchpad}"""
         
         try:
             # Load conversation history if memory is available
-            if self.memory:
-                await self.memory.load_history(session_id)
-                self.memory.add_user_message(user_input)
+            if self.memory and self.memory.db_session:
+                try:
+                    # Reload from database with the current session_id
+                    self.memory.session_id = session_id
+                    self.memory.reload_from_database()
+                    self.memory.add_user_message(user_input)
+                except Exception as e:
+                    logger.warning(f"Failed to load history: {e}")
+                    self.memory.add_user_message(user_input)
             
             # Add debug info
             if self.enable_debug and execution_id:
@@ -227,28 +227,98 @@ Thought: {agent_scratchpad}"""
                 )
             
             # Execute agent with invoke
+            logger.info(f"Executing agent with input: {user_input[:50]}..., kb_id: {kb_id}")
+            # Add kb_id context to the user message if provided
+            if kb_id:
+                enhanced_input = f"[知识库ID: {kb_id}] {user_input}"
+            else:
+                enhanced_input = user_input
             result = await self.agent_executor.ainvoke({
-                "messages": [{"role": "user", "content": user_input}]
+                "messages": [{"role": "user", "content": enhanced_input}]
             })
-            
-            # Extract output from result
-            if isinstance(result, dict):
+            logger.info(f"Agent execution completed, result type: {type(result)}")
+
+            # Extract output and tool calls from result
+            output = ""
+            tool_calls = []
+
+            # Handle different result types from create_agent
+            logger.info(f"Processing result, type: {type(result)}")
+
+            if hasattr(result, 'content'):
+                # It's an AIMessage object directly
+                output = result.content
+                # Check for tool calls
+                if hasattr(result, 'tool_calls') and result.tool_calls:
+                    logger.info(f"Found {len(result.tool_calls)} tool calls in AIMessage")
+                    for tc in result.tool_calls:
+                        tool_calls.append(ToolCall(
+                            tool_name=tc.get('name', 'unknown'),
+                            tool_input=tc.get('args', {}),
+                            tool_output={},
+                            execution_time=0.0,
+                            timestamp=time.time()
+                        ))
+            elif isinstance(result, dict):
                 output = result.get("output", "")
+
+                # Extract tool calls from messages - check AIMessage objects
+                if "messages" in result:
+                    messages = result["messages"]
+                    logger.info(f"Processing {len(messages)} messages")
+                    for i, msg in enumerate(messages):
+                        msg_type = getattr(msg, 'type', 'unknown') if hasattr(msg, '__dict__') else type(msg).__name__
+                        logger.info(f"Message {i}: {msg_type}")
+
+                        # Check for tool messages
+                        if hasattr(msg, 'type') and msg.type == "tool":
+                            tool_name = getattr(msg, 'name', 'unknown')
+                            tool_input = getattr(msg, 'tool_input', {})
+                            tool_output = getattr(msg, 'content', '')
+                            logger.info(f"Tool message: {tool_name}")
+                            tool_calls.append(ToolCall(
+                                tool_name=tool_name,
+                                tool_input=tool_input,
+                                tool_output={"result": tool_output},
+                                execution_time=0.0,
+                                timestamp=time.time()
+                            ))
+
+                        # Check for AIMessage with tool_calls
+                        if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                            for tc in msg.tool_calls:
+                                tool_name = tc.get('name', tc.get('function', {}).get('name', 'unknown'))
+                                tool_args = tc.get('args', tc.get('function', {}).get('arguments', {}))
+                                logger.info(f"Found tool call: {tool_name}")
+                                tool_calls.append(ToolCall(
+                                    tool_name=tool_name,
+                                    tool_input=tool_args if isinstance(tool_args, dict) else {"raw": str(tool_args)},
+                                    tool_output={},
+                                    execution_time=0.0,
+                                    timestamp=time.time()
+                                ))
+
                 if not output and "messages" in result:
                     messages = result["messages"]
                     if messages and isinstance(messages, list):
                         last_msg = messages[-1]
-                        if isinstance(last_msg, dict):
+                        if hasattr(last_msg, 'content'):
+                            # It's an AIMessage in the list
+                            output = last_msg.content
+                        elif isinstance(last_msg, dict):
                             output = last_msg.get("content", "")
                         else:
                             output = str(last_msg)
             else:
                 output = str(result)
+
+            logger.info(f"Final output: {output[:100] if output else 'empty'}..., tool_calls: {len(tool_calls)}")
             
             # Save AI response to memory
             if self.memory and output:
+                self.memory.session_id = session_id
                 self.memory.add_ai_message(output)
-                await self.memory.save_message(session_id)
+                # Messages are auto-saved if auto_save is set to True
             
             execution_time = time.time() - start_time
             
@@ -328,16 +398,88 @@ Thought: {agent_scratchpad}"""
     async def astream(
         self,
         user_input: str,
-        session_id: str
-    ) -> AsyncIterator[str]:
-        """Stream agent responses asynchronously."""
-        result = await self.ainvoke(user_input, session_id, stream=False)
-        yield result.output
+        session_id: str,
+        kb_id: Optional[str] = None
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Stream agent responses asynchronously with real-time token streaming."""
+        logger.info(f"astream called with user_input: {user_input[:50]}..., kb_id: {kb_id}")
+
+        # Yield start event
+        yield {"type": "start", "session_id": session_id}
+        logger.info("Yielded start event")
+
+        # Add kb_id context to the user message if provided
+        if kb_id:
+            enhanced_input = f"[知识库ID: {kb_id}] {user_input}"
+        else:
+            enhanced_input = user_input
+
+        try:
+            # Use astream_events for real-time streaming
+            # This yields tokens as they are generated
+            accumulated_output = ""
+            tool_called = False  # Track if any tool has been called
+
+            async for event in self.agent_executor.astream_events(
+                {"messages": [{"role": "user", "content": enhanced_input}]},
+                version="v1"
+            ):
+                event_type = event.get("event")
+                data = event.get("data", {})
+
+                # Handle LLM new token events (streamed output)
+                if event_type == "on_chat_model_stream":
+                    chunk = data.get("chunk", {})
+                    if hasattr(chunk, "content") and chunk.content:
+                        content = chunk.content
+                        accumulated_output += content
+                        # Determine if this is thinking or final answer
+                        output_type = "thinking" if not tool_called else "final_answer"
+                        yield {"type": "output", "output_type": output_type, "data": {"output": content, "accumulated": accumulated_output}}
+
+                # Handle tool calls
+                elif event_type == "on_tool_start":
+                    tool_called = True
+                    tool_name = event.get("name", "unknown")
+                    tool_input = data.get("input", {})
+                    logger.info(f"Tool start: {tool_name}")
+                    yield {
+                        "type": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_input": tool_input,
+                        "tool_output": None,
+                        "execution_time": 0.0,
+                        "status": "running"
+                    }
+
+                # Handle tool end
+                elif event_type == "on_tool_end":
+                    tool_name = event.get("name", "unknown")
+                    tool_output = data.get("output", "")
+                    logger.info(f"Tool end: {tool_name}")
+                    yield {
+                        "type": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_input": {},
+                        "tool_output": tool_output if isinstance(tool_output, dict) else {"result": str(tool_output)},
+                        "execution_time": 0.0,
+                        "status": "success"
+                    }
+
+            logger.info(f"astream completed, accumulated output length: {len(accumulated_output)}")
+
+        except Exception as e:
+            logger.error(f"Error in astream: {str(e)}")
+            yield {"type": "error", "data": {"error": str(e)}}
+
+        # Yield end event
+        yield {"type": "end", "session_id": session_id}
     
     async def clear_session(self, session_id: str) -> None:
         """Clear conversation history for a session."""
         if self.memory:
-            await self.memory.clear(session_id)
+            self.memory.session_id = session_id
+            self.memory.clear()  # Use synchronous clear, it handles database
             logger.info(f"Cleared session: {session_id}")
     
     def get_performance_stats(self) -> Dict[str, Any]:

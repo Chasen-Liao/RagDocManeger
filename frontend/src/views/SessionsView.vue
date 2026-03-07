@@ -17,12 +17,6 @@ interface Session {
   message_count: number
 }
 
-interface HistoryMessage {
-  role: string
-  content: string
-  created_at: string
-}
-
 const sessions = ref<Session[]>([])
 const isLoading = ref(false)
 
@@ -54,13 +48,11 @@ async function deleteSession(sessionId: string) {
 }
 
 function loadSession(session: Session) {
-  // Save selected session ID to localStorage for chat page to use
   localStorage.setItem('ragdocman_current_session', session.session_id)
   router.push('/')
 }
 
 async function clearAllSessions() {
-  // Clear all sessions one by one
   for (const session of sessions.value) {
     await api.clearAgentSession(session.session_id)
   }
@@ -86,10 +78,10 @@ function getPreviewText(preview: string) {
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-4rem)] max-w-4xl mx-auto px-4 py-8">
+  <div class="min-h-[calc(100vh-4rem)] max-w-3xl mx-auto px-4 py-8">
     <div class="flex items-center justify-between mb-6">
-      <h1 class="font-title text-2xl font-bold text-light-text dark:text-dark-text flex items-center gap-2">
-        <MessageSquare class="w-6 h-6" />
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+        <MessageSquare class="w-5 h-5" />
         {{ languageStore.t.sessions.title }}
       </h1>
       <Button v-if="sessions.length > 0" variant="ghost" size="sm" @click="clearAllSessions">
@@ -99,49 +91,49 @@ function getPreviewText(preview: string) {
 
     <!-- Loading state -->
     <div v-if="isLoading" class="flex items-center justify-center h-64">
-      <Loader2 class="w-8 h-8 animate-spin text-cyan-500" />
+      <Loader2 class="w-6 h-6 animate-spin text-gray-400" />
     </div>
 
     <!-- Empty state -->
     <div v-else-if="sessions.length === 0" class="flex flex-col items-center justify-center h-64 text-center">
-      <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mb-4">
-        <Bot class="w-8 h-8 text-light-cta dark:text-dark-cta" />
+      <div class="w-14 h-14 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+        <Bot class="w-7 h-7 text-gray-500 dark:text-gray-400" />
       </div>
-      <h2 class="text-xl font-title font-semibold text-light-text dark:text-dark-text mb-2">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
         {{ languageStore.t.sessions.noHistory }}
       </h2>
-      <p class="text-light-text/60 dark:text-dark-text/60">
+      <p class="text-sm text-gray-500 dark:text-gray-400">
         {{ languageStore.t.sessions.noHistoryDesc }}
       </p>
     </div>
 
     <!-- Session list -->
-    <div v-else class="space-y-3">
+    <div v-else class="space-y-2">
       <Card
         v-for="session in sessions"
         :key="session.session_id"
         hoverable
-        class="p-4 cursor-pointer group"
+        class="p-3.5 cursor-pointer group"
         @click="loadSession(session)"
       >
         <div class="flex items-center justify-between">
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 text-sm text-light-text/50 dark:text-dark-text/50 mb-1">
-              <Bot class="w-4 h-4" />
+            <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <Bot class="w-3.5 h-3.5" />
               {{ formatDate(session.last_message_at) }}
-              <span class="text-xs text-light-text/30 dark:text-dark-text/30">
-                ({{ session.message_count }} {{ languageStore.current === 'zh' ? '条消息' : 'messages' }})
+              <span class="text-gray-400 dark:text-gray-500">
+                ({{ session.message_count }} {{ languageStore.current === 'zh' ? 'messages' : 'messages' }})
               </span>
             </div>
-            <p class="text-light-text dark:text-dark-text truncate">
+            <p class="text-sm text-gray-700 dark:text-gray-300 truncate">
               {{ getPreviewText(session.preview) }}
             </p>
           </div>
-          <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button variant="ghost" size="sm" @click.stop="deleteSession(session.session_id)">
-              <Trash2 class="w-4 h-4" />
+              <Trash2 class="w-3.5 h-3.5" />
             </Button>
-            <ChevronRight class="w-5 h-5 text-light-text/30 dark:text-dark-text/30" />
+            <ChevronRight class="w-4 h-4 text-gray-400" />
           </div>
         </div>
       </Card>

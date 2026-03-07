@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, BookOpen, FileText, Trash2, Edit2, FolderOpen, Upload, Loader2 } from 'lucide-vue-next'
+import { Plus, BookOpen, FileText, Trash2, Edit2, FolderOpen, Upload } from 'lucide-vue-next'
 import { api, type KnowledgeBase } from '@/api/client'
 import { useLanguageStore } from '@/stores/language'
 import Card from '@/components/ui/Card.vue'
@@ -112,7 +112,6 @@ async function handleUpload(event: Event, kb: KnowledgeBase) {
   try {
     const res = await api.uploadDocument(kb.id, file)
     if (res.success && res.data) {
-      // Refresh the knowledge base to get updated document count
       const kbRes = await api.getKnowledgeBase(kb.id)
       if (kbRes.success && kbRes.data) {
         const index = knowledgeBases.value.findIndex(k => k.id === kb.id)
@@ -129,73 +128,73 @@ async function handleUpload(event: Event, kb: KnowledgeBase) {
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-4rem)] max-w-5xl mx-auto px-4 py-8">
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="font-title text-2xl font-bold text-light-text dark:text-dark-text flex items-center gap-2">
-        <BookOpen class="w-6 h-6" />
+  <div class="min-h-[calc(100vh-3.5rem)] max-w-4xl mx-auto px-4 py-6">
+    <div class="flex items-center justify-between mb-5">
+      <h1 class="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+        <BookOpen class="w-4 h-4" />
         {{ languageStore.t.knowledgeBases.title }}
       </h1>
       <Button @click="showCreateModal = true">
-        <Plus class="w-4 h-4" />
+        <Plus class="w-3.5 h-3.5" />
         {{ languageStore.t.knowledgeBases.create }}
       </Button>
     </div>
 
     <div v-if="loading" class="flex items-center justify-center h-32">
-      <div class="animate-spin w-8 h-8 border-2 border-light-cta border-t-transparent rounded-full"></div>
+      <div class="animate-spin w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>
     </div>
 
-    <div v-else-if="knowledgeBases.length === 0" class="flex flex-col items-center justify-center h-64 text-center">
-      <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mb-4">
-        <FolderOpen class="w-8 h-8 text-light-cta dark:text-dark-cta" />
+    <div v-else-if="knowledgeBases.length === 0" class="flex flex-col items-center justify-center h-56 text-center">
+      <div class="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3">
+        <FolderOpen class="w-5 h-5 text-gray-500 dark:text-gray-400" />
       </div>
-      <h2 class="text-xl font-title font-semibold text-light-text dark:text-dark-text mb-2">
+      <h2 class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
         {{ languageStore.t.knowledgeBases.noKnowledgeBases }}
       </h2>
-      <p class="text-light-text/60 dark:text-dark-text/60 mb-4">
+      <p class="text-[13px] text-gray-500 dark:text-gray-400 mb-4">
         {{ languageStore.t.knowledgeBases.noKnowledgeBasesDesc }}
       </p>
       <Button @click="showCreateModal = true">
-        <Plus class="w-4 h-4" />
+        <Plus class="w-3.5 h-3.5" />
         {{ languageStore.t.knowledgeBases.createKnowledgeBase }}
       </Button>
     </div>
 
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3">
       <Card
         v-for="kb in knowledgeBases"
         :key="kb.id"
         hoverable
-        class="p-5"
+        class="p-3.5"
       >
-        <div class="flex items-start justify-between mb-3">
+        <div class="flex items-start justify-between mb-2">
           <div class="flex-1 min-w-0">
-            <h3 class="font-title font-semibold text-lg text-light-text dark:text-dark-text truncate">
+            <h3 class="font-medium text-gray-900 dark:text-gray-100 text-[14px] truncate">
               {{ kb.name }}
             </h3>
-            <p class="text-sm text-light-text/60 dark:text-dark-text/60 line-clamp-2 mt-1">
+            <p class="text-[12px] text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5">
               {{ kb.description || languageStore.t.knowledgeBases.noDescription }}
             </p>
           </div>
-          <div class="flex items-center gap-1 ml-2">
+          <div class="flex items-center gap-0.5 ml-2">
             <Button variant="ghost" size="sm" @click="openEdit(kb)">
-              <Edit2 class="w-4 h-4" />
+              <Edit2 class="w-3.5 h-3.5" />
             </Button>
             <Button variant="ghost" size="sm" @click="openDelete(kb)">
-              <Trash2 class="w-4 h-4" />
+              <Trash2 class="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
 
-        <div class="flex items-center gap-4 text-sm text-light-text/50 dark:text-dark-text/50 mb-4">
+        <div class="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400 mb-3">
           <div class="flex items-center gap-1">
-            <FileText class="w-4 h-4" />
+            <FileText class="w-3 h-3" />
             {{ kb.document_count }} {{ languageStore.t.knowledgeBases.docs }}
           </div>
           <div>{{ formatSize(kb.total_size) }}</div>
         </div>
 
-        <div class="flex gap-2">
+        <div class="flex gap-1.5">
           <div class="flex-1 relative">
             <input
               :id="'upload-' + kb.id"
@@ -206,16 +205,16 @@ async function handleUpload(event: Event, kb: KnowledgeBase) {
               :disabled="uploadingKbId === kb.id"
             />
             <Button
-              variant="primary"
+              variant="secondary"
               class="w-full"
               :loading="uploadingKbId === kb.id"
             >
-              <Upload class="w-4 h-4" />
+              <Upload class="w-3.5 h-3.5" />
               {{ languageStore.t.documents.upload }}
             </Button>
           </div>
           <Button variant="secondary" @click="viewDocuments(kb)">
-            <FolderOpen class="w-4 h-4" />
+            <FolderOpen class="w-3.5 h-3.5" />
           </Button>
         </div>
       </Card>
@@ -223,22 +222,22 @@ async function handleUpload(event: Event, kb: KnowledgeBase) {
 
     <!-- Create Modal -->
     <Modal v-model:open="showCreateModal" :title="languageStore.t.knowledgeBases.createKnowledgeBase">
-      <div class="space-y-4">
+      <div class="space-y-3">
         <div>
-          <label class="block text-sm font-medium text-light-text dark:text-dark-text mb-1">{{ languageStore.t.knowledgeBases.name }}</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{{ languageStore.t.knowledgeBases.name }}</label>
           <Input v-model="newKb.name" :placeholder="languageStore.t.knowledgeBases.name" />
         </div>
         <div>
-          <label class="block text-sm font-medium text-light-text dark:text-dark-text mb-1">{{ languageStore.t.knowledgeBases.description }}</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{{ languageStore.t.knowledgeBases.description }}</label>
           <textarea
             v-model="newKb.description"
             :placeholder="languageStore.t.knowledgeBases.description"
             rows="3"
-            class="w-full px-4 py-2.5 rounded-lg border border-light-border dark:border-dark-border bg-light-card dark:bg-dark-card text-light-text dark:text-dark-text placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-light-cta/50"
+            class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 text-[13px] focus:outline-none focus:ring-1 focus:ring-gray-400"
           ></textarea>
         </div>
       </div>
-      <div class="flex justify-end gap-3 mt-6">
+      <div class="flex justify-end gap-1.5 mt-4">
         <Button variant="secondary" @click="showCreateModal = false">{{ languageStore.t.knowledgeBases.cancel }}</Button>
         <Button :disabled="!newKb.name.trim()" @click="createKnowledgeBase">{{ languageStore.t.knowledgeBases.create }}</Button>
       </div>
@@ -246,22 +245,22 @@ async function handleUpload(event: Event, kb: KnowledgeBase) {
 
     <!-- Edit Modal -->
     <Modal v-model:open="showEditModal" :title="languageStore.t.knowledgeBases.title">
-      <div class="space-y-4">
+      <div class="space-y-3">
         <div>
-          <label class="block text-sm font-medium text-light-text dark:text-dark-text mb-1">{{ languageStore.t.knowledgeBases.name }}</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{{ languageStore.t.knowledgeBases.name }}</label>
           <Input v-model="newKb.name" :placeholder="languageStore.t.knowledgeBases.name" />
         </div>
         <div>
-          <label class="block text-sm font-medium text-light-text dark:text-dark-text mb-1">{{ languageStore.t.knowledgeBases.description }}</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{{ languageStore.t.knowledgeBases.description }}</label>
           <textarea
             v-model="newKb.description"
             :placeholder="languageStore.t.knowledgeBases.description"
             rows="3"
-            class="w-full px-4 py-2.5 rounded-lg border border-light-border dark:border-dark-border bg-light-card dark:bg-dark-card text-light-text dark:text-dark-text placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-light-cta/50"
+            class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 text-[13px] focus:outline-none focus:ring-1 focus:ring-gray-400"
           ></textarea>
         </div>
       </div>
-      <div class="flex justify-end gap-3 mt-6">
+      <div class="flex justify-end gap-1.5 mt-4">
         <Button variant="secondary" @click="showEditModal = false">{{ languageStore.t.knowledgeBases.cancel }}</Button>
         <Button :disabled="!newKb.name.trim()" @click="updateKnowledgeBase">{{ languageStore.t.knowledgeBases.save }}</Button>
       </div>
@@ -269,10 +268,10 @@ async function handleUpload(event: Event, kb: KnowledgeBase) {
 
     <!-- Delete Modal -->
     <Modal v-model:open="showDeleteModal" :title="languageStore.t.knowledgeBases.delete" size="sm">
-      <p class="text-light-text/70 dark:text-dark-text/70">
+      <p class="text-[13px] text-gray-600 dark:text-gray-400">
         {{ languageStore.t.knowledgeBases.deleteConfirm.replace('{name}', editingKb?.name || '') }}
       </p>
-      <div class="flex justify-end gap-3 mt-6">
+      <div class="flex justify-end gap-1.5 mt-4">
         <Button variant="secondary" @click="showDeleteModal = false">{{ languageStore.t.knowledgeBases.cancel }}</Button>
         <Button variant="danger" @click="deleteKnowledgeBase">{{ languageStore.t.knowledgeBases.delete }}</Button>
       </div>

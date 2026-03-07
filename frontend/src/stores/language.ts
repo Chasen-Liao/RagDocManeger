@@ -47,6 +47,7 @@ const translations = {
     documents: {
       title: '文档',
       upload: '上传',
+      uploading: '上传中...',
       delete: '删除',
       noDocuments: '暂无文档',
       noDocumentsDesc: '上传您的第一个文档来构建知识库。',
@@ -122,6 +123,7 @@ const translations = {
     documents: {
       title: 'Documents',
       upload: 'Upload',
+      uploading: 'Uploading...',
       delete: 'Delete',
       noDocuments: 'No Documents',
       noDocumentsDesc: 'Upload your first document to start building your knowledge base.',

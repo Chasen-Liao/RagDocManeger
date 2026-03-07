@@ -25,39 +25,39 @@ function getNavName(item: typeof navItems[0]) {
 </script>
 
 <template>
-  <header class="fixed top-0 left-0 right-0 z-40 glass border-b border-light-border/50 dark:border-dark-border/50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+  <header class="fixed top-0 left-0 right-0 z-50 backdrop-header border-b border-gray-200 dark:border-gray-800">
+    <div class="max-w-5xl mx-auto px-4">
+      <div class="flex items-center justify-between h-14">
         <!-- Logo -->
-        <router-link to="/" class="flex items-center gap-2 group">
-          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-            <span class="text-white font-bold text-sm">RD</span>
+        <router-link to="/" class="flex items-center gap-2.5 group">
+          <div class="w-7 h-7 rounded-md bg-gray-900 dark:bg-gray-100 flex items-center justify-center">
+            <span class="text-white dark:text-gray-900 font-semibold text-xs">R</span>
           </div>
-          <span class="font-title font-bold text-xl text-light-text dark:text-dark-text group-hover:text-light-cta dark:hover:text-dark-cta transition-colors">
+          <span class="font-semibold text-gray-900 dark:text-gray-100 text-[15px]">
             RagDocMan
           </span>
         </router-link>
 
         <!-- Navigation -->
-        <nav class="hidden md:flex items-center gap-1">
+        <nav class="hidden md:flex items-center gap-0.5">
           <router-link
             v-for="item in navItems"
             :key="item.path"
             :to="item.path"
             :class="[
-              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors duration-150',
               isActive(item.path)
-                ? 'bg-light-cta/10 dark:bg-dark-cta/10 text-light-cta dark:text-dark-cta'
-                : 'text-light-text/70 dark:text-dark-text/70 hover:bg-light-border/50 dark:hover:bg-dark-border/50 hover:text-light-text dark:hover:text-dark-text'
+                ? 'bg-gray-200/60 dark:bg-gray-800/60 text-gray-900 dark:text-gray-100'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/50'
             ]"
           >
-            <component :is="item.icon" class="w-4 h-4" />
+            <component :is="item.icon" class="w-[15px] h-[15px]" />
             {{ getNavName(item) }}
           </router-link>
         </nav>
 
         <!-- Right side -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-0.5">
           <LanguageToggle />
           <ThemeToggle />
         </div>
@@ -65,6 +65,3 @@ function getNavName(item: typeof navItems[0]) {
     </div>
   </header>
 </template>
-
-<style scoped>
-</style>

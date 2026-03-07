@@ -360,10 +360,19 @@ export const api = {
       onContent?: (content: string, type: string) => void
       onDone?: () => void
       onError?: (error: string) => void
-    }
+    },
+    kbId?: string
   ): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
+        const requestBody: any = {
+          user_input: userInput,
+          session_id: sessionId,
+          stream: true
+        }
+        if (kbId) {
+          requestBody.kb_id = kbId
+        }
         const res = await fetch(`${AGENT_API_BASE}/agent/chat/stream`, {
           method: 'POST',
           headers: {
@@ -372,11 +381,7 @@ export const api = {
             'Cache-Control': 'no-cache',
             'X-Accel-Buffering': 'no'
           },
-          body: JSON.stringify({
-            user_input: userInput,
-            session_id: sessionId,
-            stream: true
-          })
+          body: JSON.stringify(requestBody)
         })
 
         if (!res.ok || !res.body) {
@@ -404,11 +409,12 @@ export const api = {
             try {
               const data = JSON.parse(trimmedLine.slice(6))
               const chunkType = data.type || 'output'
+              const outputType = data.data?.output_type || 'final_answer'
 
               if (chunkType === 'tool_call' && callbacks.onToolCall) {
                 callbacks.onToolCall(data)
               } else if (chunkType === 'output' && callbacks.onContent) {
-                callbacks.onContent(data.data?.output || '', chunkType)
+                callbacks.onContent(data.data?.output || '', outputType)
               } else if (chunkType === 'end' && callbacks.onDone) {
                 callbacks.onDone()
                 resolve()

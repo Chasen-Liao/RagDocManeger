@@ -2,21 +2,22 @@
 
 import logging
 from typing import Optional, List, Any, Iterator, AsyncIterator
-from langchain_core.language_models.llms import LLM
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
-from langchain_core.outputs import GenerationChunk
+from langchain_core.outputs import ChatResult, ChatGeneration, GenerationChunk
 from pydantic import Field
 from .llm_provider import LLMProvider
 
 logger = logging.getLogger(__name__)
 
 
-class LangChainLLMWrapper(LLM):
+class LangChainLLMWrapper(BaseChatModel):
     """
     LangChain 1.x compatible wrapper for LLM Provider.
     
-    This wrapper adapts our custom LLM Provider to the LangChain 1.x LLM interface,
-    supporting synchronous, asynchronous, and streaming execution.
+    This wrapper adapts our custom LLM Provider to the LangChain 1.x Chat Model interface,
+    supporting synchronous, asynchronous, and streaming execution with tool binding.
     
     Attributes:
         llm_provider: The underlying LLM provider instance
@@ -47,26 +48,24 @@ class LangChainLLMWrapper(LLM):
         """
         return self.model_name
 
-    def _call(
+    def _generate(
         self,
-        prompt: str,
+        messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any
-    ) -> str:
+    ) -> ChatResult:
         """
-        Call the LLM synchronously.
-        
-        This method wraps the async generate method to provide synchronous execution.
+        Generate chat response synchronously.
 
         Args:
-            prompt: Input prompt
+            messages: List of messages in the conversation
             stop: Stop sequences (not currently used)
             run_manager: Callback manager for LLM run
             **kwargs: Additional parameters to pass to the LLM
 
         Returns:
-            Generated text string
+            ChatResult with generated message
             
         Raises:
             Exception: If LLM generation fails
@@ -74,6 +73,9 @@ class LangChainLLMWrapper(LLM):
         import asyncio
 
         try:
+            # Convert messages to prompt
+            prompt = self._messages_to_prompt(messages)
+            
             # Get or create event loop
             try:
                 loop = asyncio.get_event_loop()
@@ -89,41 +91,51 @@ class LangChainLLMWrapper(LLM):
             )
             
             logger.debug(f"LLM generation completed: {len(result)} characters")
-            return result
+            
+            # Create chat generation
+            message = AIMessage(content=result)
+            generation = ChatGeneration(message=message)
+            
+            return ChatResult(generations=[generation])
 
         except Exception as e:
             logger.error(f"Error in synchronous LLM call: {str(e)}")
             raise
 
-    async def _acall(
+    async def _agenerate(
         self,
-        prompt: str,
+        messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any
-    ) -> str:
+    ) -> ChatResult:
         """
-        Call the LLM asynchronously.
-        
-        This method provides native async execution for better performance
-        in async contexts.
+        Generate chat response asynchronously.
 
         Args:
-            prompt: Input prompt
+            messages: List of messages in the conversation
             stop: Stop sequences (not currently used)
             run_manager: Async callback manager for LLM run
             **kwargs: Additional parameters to pass to the LLM
 
         Returns:
-            Generated text string
+            ChatResult with generated message
             
         Raises:
             Exception: If LLM generation fails
         """
         try:
+            # Convert messages to prompt
+            prompt = self._messages_to_prompt(messages)
+            
             result = await self.llm_provider.generate(prompt, **kwargs)
             logger.debug(f"Async LLM generation completed: {len(result)} characters")
-            return result
+            
+            # Create chat generation
+            message = AIMessage(content=result)
+            generation = ChatGeneration(message=message)
+            
+            return ChatResult(generations=[generation])
 
         except Exception as e:
             logger.error(f"Error in asynchronous LLM call: {str(e)}")
@@ -131,18 +143,16 @@ class LangChainLLMWrapper(LLM):
 
     def _stream(
         self,
-        prompt: str,
+        messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any
     ) -> Iterator[GenerationChunk]:
         """
         Stream the LLM output synchronously.
-        
-        This method provides streaming support for real-time text generation.
 
         Args:
-            prompt: Input prompt
+            messages: List of messages in the conversation
             stop: Stop sequences (not currently used)
             run_manager: Callback manager for LLM run
             **kwargs: Additional parameters to pass to the LLM
@@ -156,6 +166,9 @@ class LangChainLLMWrapper(LLM):
         import asyncio
 
         try:
+            # Convert messages to prompt
+            prompt = self._messages_to_prompt(messages)
+            
             # Get or create event loop
             try:
                 loop = asyncio.get_event_loop()
@@ -197,18 +210,16 @@ class LangChainLLMWrapper(LLM):
 
     async def _astream(
         self,
-        prompt: str,
+        messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any
     ) -> AsyncIterator[GenerationChunk]:
         """
         Stream the LLM output asynchronously.
-        
-        This method provides native async streaming for better performance.
 
         Args:
-            prompt: Input prompt
+            messages: List of messages in the conversation
             stop: Stop sequences (not currently used)
             run_manager: Async callback manager for LLM run
             **kwargs: Additional parameters to pass to the LLM
@@ -220,6 +231,9 @@ class LangChainLLMWrapper(LLM):
             Exception: If streaming fails
         """
         try:
+            # Convert messages to prompt
+            prompt = self._messages_to_prompt(messages)
+            
             # Check if provider supports streaming
             if not hasattr(self.llm_provider, 'generate_stream'):
                 # Fallback: generate full response and yield it
@@ -241,6 +255,27 @@ class LangChainLLMWrapper(LLM):
         except Exception as e:
             logger.error(f"Error in asynchronous streaming: {str(e)}")
             raise
+
+    def _messages_to_prompt(self, messages: List[BaseMessage]) -> str:
+        """
+        Convert list of messages to a single prompt string.
+        
+        Args:
+            messages: List of BaseMessage objects
+            
+        Returns:
+            Formatted prompt string
+        """
+        prompt_parts = []
+        for message in messages:
+            if isinstance(message, HumanMessage):
+                prompt_parts.append(f"Human: {message.content}")
+            elif isinstance(message, AIMessage):
+                prompt_parts.append(f"Assistant: {message.content}")
+            else:
+                prompt_parts.append(str(message.content))
+        
+        return "\n".join(prompt_parts)
 
     @property
     def _identifying_params(self) -> dict:

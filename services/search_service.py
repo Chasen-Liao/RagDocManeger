@@ -32,7 +32,7 @@ class SearchService:
         embedding_provider=None,
         reranker_provider=None,
         llm_provider=None,
-        embedding_batch_size: int = 10,
+        embedding_batch_size: int = 2,
     ):
         """
         Initialize search service.
@@ -42,7 +42,7 @@ class SearchService:
             embedding_provider: Provider for generating embeddings
             reranker_provider: Provider for reranking results
             llm_provider: Provider for LLM calls
-            embedding_batch_size: Number of chunks to embed in each batch
+            embedding_batch_size: Number of chunks to embed in each batch (default: 5 to avoid API limits)
         """
         self.db = db
         self.embedding_provider = embedding_provider
@@ -98,8 +98,12 @@ class SearchService:
                 for chunk in chunks
             ]
 
-            # Build index
-            await self.hybrid_retriever.build_index(chunk_dicts, batch_size=self.embedding_batch_size)
+            # Build index (with reduced batch size and text length to avoid 413 errors)
+            await self.hybrid_retriever.build_index(
+                chunk_dicts,
+                batch_size=self.embedding_batch_size,
+                max_chars_per_text=500  # Reduce to avoid API limits
+            )
 
             # Retrieve results
             results = await self.hybrid_retriever.retrieve(
@@ -175,8 +179,12 @@ class SearchService:
                 for chunk in chunks
             ]
 
-            # Build index
-            await self.hybrid_retriever.build_index(chunk_dicts, batch_size=self.embedding_batch_size)
+            # Build index (with reduced batch size and text length to avoid 413 errors)
+            await self.hybrid_retriever.build_index(
+                chunk_dicts,
+                batch_size=self.embedding_batch_size,
+                max_chars_per_text=500  # Reduce to avoid API limits
+            )
 
             # Search with all rewritten queries
             all_results = []

@@ -3,7 +3,6 @@ import { onMounted } from 'vue'
 import { useThemeStore } from '@/stores/theme'
 import { useLanguageStore } from '@/stores/language'
 import AppHeader from '@/components/layout/AppHeader.vue'
-import ParticleBackground from '@/components/layout/ParticleBackground.vue'
 
 const themeStore = useThemeStore()
 const languageStore = useLanguageStore()
@@ -15,25 +14,22 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen relative">
-    <ParticleBackground />
-    <div class="relative z-10">
-      <AppHeader />
-      <main class="pt-16">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </main>
-    </div>
+  <div class="min-h-screen">
+    <AppHeader />
+    <main class="pt-16">
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
   </div>
 </template>
 
 <style scoped>
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.15s ease;
 }
 
 .fade-enter-from,

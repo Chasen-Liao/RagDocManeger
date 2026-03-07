@@ -90,12 +90,12 @@ class SiliconFlowRerankerProvider(RerankerProvider):
                 "Content-Type": "application/json",
             }
 
-            # Prepare pairs for reranking
-            pairs = [[query, candidate] for candidate in candidates]
-
+            # Use query + documents format (required by SiliconFlow rerank API)
             payload = {
                 "model": self.model,
-                "input": pairs,
+                "query": query,
+                "documents": candidates,
+                "top_n": min(top_k, len(candidates))
             }
 
             response = await self.client.post(
@@ -109,20 +109,19 @@ class SiliconFlowRerankerProvider(RerankerProvider):
                 try:
                     error_data = response.json()
                     error_msg = error_data.get("error", {}).get("message", error_msg)
+                    logger.error(f"Reranker API error: {error_msg}, response: {response.text}")
                 except Exception:
-                    pass
+                    logger.error(f"Reranker API error response: {response.text}")
                 raise Exception(error_msg)
 
             data = response.json()
             if "results" not in data:
                 raise Exception("No results in response")
 
-            # Sort by score descending and return top_k
-            results = sorted(
-                data["results"], key=lambda x: x.get("score", 0), reverse=True
-            )
+            # Results are already sorted by score, just take top_k
+            results = data["results"][:top_k]
             return [
-                (r.get("index", 0), r.get("score", 0.0)) for r in results[:top_k]
+                (r.get("index", 0), r.get("score", 0.0)) for r in results
             ]
 
         except httpx.TimeoutException:

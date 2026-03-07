@@ -8,12 +8,12 @@ const themeStore = useThemeStore()
 <template>
   <button
     @click="themeStore.toggleTheme()"
-    class="p-2 rounded-lg text-light-text/70 dark:text-dark-text/70 hover:bg-light-border/50 dark:hover:bg-dark-border/50 transition-all duration-200"
-    :title="themeStore.isDark ? '切换到浅色模式' : '切换到深色模式'"
+    class="p-1.5 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150"
+    :title="themeStore.isDark ? 'Switch to light mode' : 'Switch to dark mode'"
   >
     <Transition name="rotate" mode="out-in">
-      <Moon v-if="themeStore.isDark" key="moon" class="w-5 h-5" />
-      <Sun v-else key="sun" class="w-5 h-5" />
+      <Moon v-if="themeStore.isDark" key="moon" class="w-4 h-4" />
+      <Sun v-else key="sun" class="w-4 h-4" />
     </Transition>
   </button>
 </template>
@@ -21,7 +21,7 @@ const themeStore = useThemeStore()
 <style scoped>
 .rotate-enter-active,
 .rotate-leave-active {
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .rotate-enter-from {
