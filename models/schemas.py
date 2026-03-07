@@ -1,4 +1,7 @@
-"""Pydantic schemas for API requests and responses."""
+"""Pydantic schemas for API requests and responses.
+这里是用于创建 Pydantic 的模型
+用于给Agent构建结构化输入输出
+"""
 from datetime import datetime
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field
